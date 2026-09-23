@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SnapCraft</title>
+  <link rel="stylesheet" href="launcher.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon.svg" alt="">
+    <div class="identity"><strong>SnapCraft</strong><small>Windows Capture</small></div>
+    <span id="state" class="state">พร้อมใช้งาน</span>
+  </header>
+  <main>
+    <div class="actions" aria-label="จับภาพ">
+      <button data-action="area" title="เลือกพื้นที่หน้าจอ"><i data-lucide="scan"></i><span>พื้นที่</span></button>
+      <button data-action="window" title="เลือกหน้าต่าง"><i data-lucide="app-window"></i><span>หน้าต่าง</span></button>
+      <button data-action="scroll" title="จับภาพยาวในบริเวณที่เลื่อน"><i data-lucide="gallery-vertical-end"></i><span>ภาพยาว</span></button>
+      <button data-action="video" class="record" title="บันทึกวิดีโอ MP4"><i data-lucide="video"></i><span>วิดีโอ</span></button>
+    </div>
+    <div id="videoMenu" class="video-menu" hidden>
+      <button data-video="videoScreen"><i data-lucide="monitor"></i>ทั้งหน้าจอ</button>
+      <button data-video="videoWindow"><i data-lucide="app-window"></i>เลือกหน้าต่าง</button>
+    </div>
+    <div class="options">
+      <label><i data-lucide="timer"></i><span>หน่วง</span><select id="delay"><option value="0">ทันที</option><option value="3000">3 วินาที</option><option value="5000">5 วินาที</option><option value="10000">10 วินาที</option></select></label>
+      <label><i data-lucide="panel-top"></i><span>เปิดภาพ</span><select id="open"><option value="window">หน้าต่างใหม่</option><option value="tab">แท็บใหม่</option></select></label>
+    </div>
+    <div class="recording-bar" id="recordingBar" hidden>
+      <span class="pulse"></span><strong id="elapsed">00:00:00</strong>
+      <button id="stop" title="หยุดและบันทึก MP4"><i data-lucide="square"></i>หยุด</button>
+      <button id="cancel" title="ยกเลิกวิดีโอ"><i data-lucide="x"></i>ยกเลิก</button>
+    </div>
+  </main>
+  <script src="vendor/lucide.js"></script>
+  <script src="launcher.js"></script>
+</body>
+</html>

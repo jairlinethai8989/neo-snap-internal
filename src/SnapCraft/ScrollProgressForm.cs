@@ -1,0 +1,60 @@
+namespace SnapCraft;
+
+internal sealed class ScrollProgressForm : Form
+{
+    private readonly Label label = new() { AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Width = 224, Dock = DockStyle.Left };
+    private readonly Button finish = new() { Text = "เสร็จ", Width = 57, Dock = DockStyle.Right };
+    private readonly Button manual = new() { Text = "เลื่อนเอง", Width = 82, Dock = DockStyle.Right };
+    private readonly Button cancel = new() { Text = "ยกเลิก", Width = 65, Dock = DockStyle.Right };
+    public bool FinishRequested { get; private set; }
+    public bool CancelRequested { get; private set; }
+    public bool Manual { get; private set; }
+
+    public ScrollProgressForm(Rectangle target)
+    {
+        Text = "SnapCraft | ภาพยาว";
+        FormBorderStyle = FormBorderStyle.FixedToolWindow;
+        ShowInTaskbar = false;
+        TopMost = true;
+        ClientSize = new Size(438, 48);
+        BackColor = Color.FromArgb(24, 34, 31);
+        ForeColor = Color.White;
+        Font = new Font("Segoe UI", 9);
+        label.Padding = new Padding(10, 0, 0, 0);
+        label.Text = "กำลังจับภาพยาว... Esc เพื่อจบ";
+        foreach (var button in new[] { finish, manual, cancel })
+        {
+            button.FlatStyle = FlatStyle.Flat;
+            button.BackColor = Color.White;
+            button.ForeColor = Color.FromArgb(24, 34, 31);
+            button.Margin = new Padding(3);
+        }
+        finish.Click += (_, _) => FinishRequested = true;
+        cancel.Click += (_, _) => CancelRequested = true;
+        manual.Click += (_, _) => SetManual(!Manual);
+        Controls.Add(label);
+        Controls.Add(cancel);
+        Controls.Add(finish);
+        Controls.Add(manual);
+        var screen = Screen.FromRectangle(target).WorkingArea;
+        StartPosition = FormStartPosition.Manual;
+        Location = new Point(screen.Right - Width - 16, screen.Top + 16);
+    }
+
+    public void UpdateProgress(int count, int height, string? note = null)
+    {
+        label.Text = note ?? $"{count} ภาพ • {height:N0} px • Esc จบ";
+    }
+
+    public void SetManual(bool value)
+    {
+        Manual = value;
+        manual.Text = Manual ? "อัตโนมัติ" : "เลื่อนเอง";
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (e.CloseReason == CloseReason.UserClosing) CancelRequested = true;
+        base.OnFormClosing(e);
+    }
+}

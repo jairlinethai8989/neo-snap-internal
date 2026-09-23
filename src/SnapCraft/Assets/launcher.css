@@ -1,0 +1,35 @@
+@font-face { font-family: SnapThai; src: url('vendor/thai.ttf'); font-display: swap; }
+:root { font-family: SnapThai, 'Segoe UI', sans-serif; color: #17231f; background: #fff; }
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; }
+header { height: 53px; display: flex; align-items: center; gap: 10px; padding: 0 17px; border-bottom: 1px solid #e2e9e6; }
+header img { width: 26px; height: 26px; }
+.identity { display: flex; flex-direction: column; line-height: 1.1; }
+.identity strong { font-size: 15px; }
+.identity small { font: 10px 'Segoe UI', sans-serif; color: #74847e; margin-top: 3px; }
+.state { margin-left: auto; font-size: 11px; color: #537165; white-space: nowrap; max-width: 205px; overflow: hidden; text-overflow: ellipsis; }
+.state.error { color: #cc4652; }
+main { padding: 14px 16px 12px; }
+.actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.actions button { height: 71px; background: #fff; border: 1px solid #d7e2dc; border-radius: 7px; color: #17231f; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; cursor: pointer; font: 12px SnapThai, sans-serif; }
+.actions button:hover, .actions button:focus-visible { background: #e9faf2; border-color: #67d4a6; outline: none; }
+.actions button:active { transform: translateY(1px); }
+.actions button:disabled { opacity: .45; cursor: default; }
+.actions svg { width: 21px; height: 21px; stroke-width: 1.8; }
+.actions .record svg { color: #e94c61; }
+.video-menu { position: absolute; right: 16px; top: 132px; z-index: 2; background: #fff; border: 1px solid #d7e2dc; box-shadow: 0 8px 24px #17231f20; padding: 5px; min-width: 155px; }
+.video-menu[hidden] { display: none; }
+.video-menu button { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; border: 0; background: #fff; text-align: left; font: 11px SnapThai, sans-serif; cursor: pointer; }
+.video-menu button:hover { background: #e9faf2; }
+.video-menu svg { width: 15px; height: 15px; }
+.options { display: flex; gap: 15px; margin-top: 12px; }
+.options label { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; font-size: 11px; color: #53645d; }
+.options svg { width: 14px; height: 14px; }
+select { flex: 1; min-width: 0; height: 27px; border: 1px solid #d7e2dc; border-radius: 5px; padding: 2px 6px; font: 11px SnapThai, sans-serif; background: #f8fbf9; color: #17231f; }
+.recording-bar { position: absolute; inset: 53px 0 0; padding: 18px; background: #fff; display: flex; align-items: center; gap: 9px; }
+.recording-bar[hidden] { display: none; }
+.recording-bar strong { font: 16px 'Segoe UI', sans-serif; margin-right: auto; }
+.recording-bar button { border: 1px solid #d7e2dc; border-radius: 5px; height: 34px; display: flex; align-items: center; gap: 5px; padding: 0 10px; background: #fff; color: #17231f; cursor: pointer; font: 11px SnapThai, sans-serif; }
+.recording-bar button:hover { background: #f0f6f2; }
+.recording-bar button svg { width: 14px; height: 14px; }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: #e94c61; box-shadow: 0 0 0 4px #fbe1e4; }
