@@ -13,4 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/SnapCraft/SnapCraft.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Fixtures\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

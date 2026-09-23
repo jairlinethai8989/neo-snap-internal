@@ -24,6 +24,7 @@ internal static class NativeInput
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr handle, out RectNative rectangle);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out RectNative value, int size);
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr handle);
     [DllImport("user32.dll")] private static extern uint SendInput(uint count, ref Input input, int size);
 
     public static IntPtr RootWindowAt(Point point) => GetAncestor(WindowFromPoint(new PointNative { X = point.X, Y = point.Y }), 2);
@@ -58,6 +59,11 @@ internal static class NativeInput
         }
         catch (Exception error) when (error is ElementNotAvailableException or InvalidOperationException or COMException) { }
         return false;
+    }
+
+    public static void FocusWindow(IntPtr handle)
+    {
+        if (handle != IntPtr.Zero) SetForegroundWindow(handle);
     }
 
     public static void WheelDown(Point point, int notches = 5)

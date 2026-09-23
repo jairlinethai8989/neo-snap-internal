@@ -77,98 +77,54 @@ internal sealed class ScrollStitcher : IDisposable
     {
         var same = Score(oldPixels, newPixels, width, height, 0);
         if (same > 0.985) return 0;
-        var maximum = Math.Max(1, (int)(height * 0.86));
+        var maximum = Math.Max(1, Math.Min((int)(height * 0.86), height - Math.Max(120, height / 5)));
         var bestShift = -1;
         var bestScore = 0d;
-        var oldRows = RowHashes(oldPixels, width, height);
-        var newRows = RowHashes(newPixels, width, height);
-        var positions = new Dictionary<uint, List<int>>();
-        for (var y = 1; y < height - 1; y++)
-        {
-            if (oldRows[y] == 0) continue;
-            if (!positions.TryGetValue(oldRows[y], out var rows)) positions[oldRows[y]] = rows = new List<int>();
-            rows.Add(y);
-        }
-        var votes = new Dictionary<int, int>();
-        for (var y = 2; y < Math.Min(height / 3, 220); y += 2)
-        {
-            if (newRows[y] == 0 || !positions.TryGetValue(newRows[y], out var matches)) continue;
-            foreach (var row in matches)
-            {
-                var shift = row - y;
-                if (shift > 0 && shift <= maximum) votes[shift] = votes.GetValueOrDefault(shift) + 1;
-            }
-        }
-        foreach (var shift in votes.OrderByDescending(pair => pair.Value).Take(20).Select(pair => pair.Key))
+        var scores = new double[maximum + 1];
+        for (var shift = 1; shift <= maximum; shift++)
         {
             var score = Score(oldPixels, newPixels, width, height, shift);
+            scores[shift] = score;
             if (score > bestScore) { bestScore = score; bestShift = shift; }
         }
-        if (bestScore >= 0.88) return bestShift;
-        for (var shift = 8; shift <= maximum; shift += 8)
+        if (bestScore < 0.88) return -1;
+        var competingScore = 0d;
+        for (var shift = 1; shift <= maximum; shift++)
         {
-            var score = Score(oldPixels, newPixels, width, height, shift);
-            if (score > bestScore) { bestScore = score; bestShift = shift; }
+            if (Math.Abs(shift - bestShift) > Math.Max(5, height / 50))
+                competingScore = Math.Max(competingScore, scores[shift]);
         }
-        if (bestShift < 0) return -1;
-        for (var shift = Math.Max(1, bestShift - 8); shift <= Math.Min(maximum, bestShift + 8); shift++)
-        {
-            var score = Score(oldPixels, newPixels, width, height, shift);
-            if (score > bestScore) { bestScore = score; bestShift = shift; }
-        }
-        return bestScore >= 0.76 ? bestShift : -1;
-    }
-
-    private static uint[] RowHashes(byte[] pixels, int width, int height)
-    {
-        var hashes = new uint[height];
-        var step = Math.Max(4, width / 120);
-        for (var y = 0; y < height; y++)
-        {
-            var hash = 2166136261u;
-            var informative = 0;
-            for (var x = 8; x < width - 8; x += step)
-            {
-                var index = (y * width + x) * 4;
-                for (var channel = 0; channel < 3; channel++)
-                {
-                    var value = pixels[index + channel];
-                    hash = unchecked((hash ^ value) * 16777619u);
-                    if (value < 235) informative++;
-                }
-            }
-            if (informative >= 5) hashes[y] = hash;
-        }
-        return hashes;
+        return bestScore - competingScore >= 0.001 ? bestShift : -1;
     }
 
     private static double Score(byte[] oldPixels, byte[] newPixels, int width, int height, int shift)
     {
         var overlap = height - shift;
         if (overlap < height * 0.12) return 0;
-        var xStep = Math.Max(7, width / 90);
-        var yStep = Math.Max(3, overlap / 80);
-        var matching = 0;
-        var total = 0;
+        var xStep = Math.Max(2, width / 160);
+        var yStep = Math.Max(2, overlap / 140);
+        double error = 0;
+        double weightTotal = 0;
         var topMargin = Math.Max(4, Math.Min(100, height / 10));
         for (var y = topMargin; y < overlap - 4; y += yStep)
         {
             var oldRow = (y + shift) * width * 4;
             var newRow = y * width * 4;
-            for (var x = 6; x < width - 6; x += xStep)
+            for (var x = 2; x < width - 2; x += xStep)
             {
                 var a = oldRow + x * 4;
                 var b = newRow + x * 4;
                 var dark = oldPixels[a] < 235 || oldPixels[a + 1] < 235 || oldPixels[a + 2] < 235 ||
                            newPixels[b] < 235 || newPixels[b + 1] < 235 || newPixels[b + 2] < 235;
-                if (!dark) continue;
-                total++;
-                if (Math.Abs(oldPixels[a] - newPixels[b]) < 25 &&
-                    Math.Abs(oldPixels[a + 1] - newPixels[b + 1]) < 25 &&
-                    Math.Abs(oldPixels[a + 2] - newPixels[b + 2]) < 25) matching++;
+                var weight = dark ? 4 : 1;
+                var difference = (Math.Abs(oldPixels[a] - newPixels[b]) +
+                                  Math.Abs(oldPixels[a + 1] - newPixels[b + 1]) +
+                                  Math.Abs(oldPixels[a + 2] - newPixels[b + 2])) / 3.0;
+                error += weight * difference;
+                weightTotal += weight;
             }
         }
-        return total < 20 ? 0 : (double)matching / total;
+        return weightTotal < 100 ? 0 : 1 - error / (255 * weightTotal);
     }
 
     public void Dispose()

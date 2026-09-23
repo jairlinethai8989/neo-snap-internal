@@ -7,6 +7,10 @@ var root = Path.Combine(AppContext.BaseDirectory, "test-output");
 Directory.CreateDirectory(root);
 TestStitcher(root);
 Console.WriteLine("stitcher: pass");
+TestFrameValidator();
+Console.WriteLine("frame validator: pass");
+TestCapturedFixtures();
+Console.WriteLine("captured fixture: pass");
 if (args.Contains("--assets"))
 {
     Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
@@ -30,12 +34,19 @@ if (args.Contains("--capture"))
     try
     {
         using var video = new VideoSession(IntPtr.Zero, Path.Combine(root, "smoke.mp4"));
-        video.Start();
+        await video.StartAsync();
         await Task.Delay(2500);
         var file = await video.StopAsync(true);
         Console.WriteLine($"video: {new FileInfo(file!).Length} bytes");
     }
     catch (Exception error) { Console.WriteLine($"video unavailable in test session: {error.Message}"); }
+}
+if (args.Contains("--scroll"))
+{
+    Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
+    WebAssets.Prepare();
+    await ScrollSmokeTest.RunAsync(root);
+    Console.WriteLine("scroll smoke: pass");
 }
 
 static void TestStitcher(string root)
@@ -84,4 +95,31 @@ static void TestStitcher(string root)
     using var unrelated = new Bitmap(width, viewport, PixelFormat.Format32bppArgb);
     using (var g = Graphics.FromImage(unrelated)) g.Clear(Color.Red);
     if (pinned.Add(unrelated) != TileResult.Ambiguous) throw new Exception("Unrelated frame was not rejected");
+}
+
+static void TestFrameValidator()
+{
+    using var black = new Bitmap(100, 100);
+    using (var graphics = Graphics.FromImage(black)) graphics.Clear(Color.Black);
+    if (!CaptureFrameValidator.IsBlank(black)) throw new Exception("Black frame was not detected");
+    using var content = new Bitmap(100, 100);
+    using (var graphics = Graphics.FromImage(content))
+    {
+        graphics.Clear(Color.Black);
+        graphics.FillRectangle(Brushes.White, 10, 10, 20, 20);
+    }
+    if (CaptureFrameValidator.IsBlank(content)) throw new Exception("Dark content was rejected");
+}
+
+static void TestCapturedFixtures()
+{
+    using var captured = new ScrollStitcher();
+    for (var frame = 1; frame <= 3; frame++)
+    {
+        using var tile = new Bitmap(Path.Combine(AppContext.BaseDirectory, "Fixtures", $"tile-{frame}.png"));
+        if (captured.Add(tile) != TileResult.Added)
+            throw new Exception($"Captured fixture {frame} did not join");
+    }
+    if (captured.TotalHeight < 1090 || captured.TotalHeight > 1140)
+        throw new Exception($"Captured fixtures joined at the wrong offset: {captured.TotalHeight} px");
 }

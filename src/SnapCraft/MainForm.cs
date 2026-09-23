@@ -16,6 +16,7 @@ internal sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer recordingTimer = new() { Interval = 250 };
     private readonly NotifyIcon tray = new();
     private bool busy;
+    private bool videoStarting;
     private bool closingAfterVideo;
 
     public MainForm()
@@ -31,7 +32,12 @@ internal sealed class MainForm : Form
         Shown += async (_, _) => await InitializeBrowserAsync();
         recordingTimer.Tick += (_, _) =>
         {
-            if (video is not null) Send(new { type = "elapsed", text = (DateTime.Now - video.StartedAt).ToString(@"hh\:mm\:ss") });
+            if (video?.FailureMessage is not null)
+            {
+                recordingTimer.Stop();
+                _ = StopVideoAsync(false);
+            }
+            else if (video is not null) Send(new { type = "elapsed", text = (DateTime.Now - video.StartedAt).ToString(@"hh\:mm\:ss") });
         };
         var menu = new ContextMenuStrip();
         menu.Items.Add("เปิด SnapCraft", null, (_, _) => ShowLauncher());
@@ -43,6 +49,7 @@ internal sealed class MainForm : Form
         tray.DoubleClick += (_, _) => ShowLauncher();
         FormClosing += async (_, e) =>
         {
+            if (videoStarting) { e.Cancel = true; return; }
             if (video is not null && !closingAfterVideo)
             {
                 e.Cancel = true;
@@ -162,17 +169,12 @@ internal sealed class MainForm : Form
             if (selected is null) return;
             handle = selected.WindowHandle;
         }
-        using var dialog = new SaveFileDialog
-        {
-            Filter = "MP4 video (*.mp4)|*.mp4",
-            FileName = $"snapcraft-{DateTime.Now:yyyyMMdd-HHmmss}.mp4",
-            AddExtension = true
-        };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        var temporaryPath = Path.Combine(WebAssets.DataRoot, "Recordings", $"{Guid.NewGuid():N}.mp4");
+        videoStarting = true;
         try
         {
-            video = new VideoSession(handle, dialog.FileName);
-            video.Start();
+            video = new VideoSession(handle, temporaryPath);
+            await video.StartAsync();
             recordingTimer.Start();
             Send(new { type = "recording", value = true });
             tray.Visible = true;
@@ -187,10 +189,11 @@ internal sealed class MainForm : Form
         {
             video?.Dispose();
             video = null;
+            try { File.Delete(temporaryPath); } catch (IOException) { }
             SetStatus($"บันทึก MP4 ไม่ได้: {error.Message}", true);
             MessageBox.Show(this, $"เริ่มบันทึก MP4 ไม่ได้: {error.Message}", "SnapCraft", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-        await Task.CompletedTask;
+        finally { videoStarting = false; }
     }
 
     private async Task StopVideoAsync(bool save)
@@ -199,15 +202,36 @@ internal sealed class MainForm : Form
         var active = video;
         video = null;
         recordingTimer.Stop();
+        SetStatus("กำลังปิดไฟล์วิดีโอ...");
+        string? recoveryPath = null;
         try
         {
-            var path = await active.StopAsync(save);
-            SetStatus(path is null ? "ยกเลิกวิดีโอ" : $"บันทึก MP4 แล้ว: {Path.GetFileName(path)}");
+            var temporaryPath = await active.StopAsync(save);
+            if (temporaryPath is null) SetStatus("ยกเลิกวิดีโอ");
+            else
+            {
+                recoveryPath = temporaryPath;
+                using var dialog = new SaveFileDialog
+                {
+                    Filter = "MP4 video (*.mp4)|*.mp4",
+                    FileName = $"snapcraft-{DateTime.Now:yyyyMMdd-HHmmss}.mp4",
+                    AddExtension = true
+                };
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    await Task.Run(() => File.Copy(temporaryPath, dialog.FileName, true));
+                    SetStatus($"บันทึก MP4 แล้ว: {Path.GetFileName(dialog.FileName)}");
+                }
+                else SetStatus("ไม่ได้บันทึกวิดีโอ");
+                try { File.Delete(temporaryPath); } catch (IOException) { }
+                recoveryPath = null;
+            }
         }
         catch (Exception error)
         {
+            var detail = recoveryPath is null ? error.Message : $"{error.Message}\nคลิปชั่วคราวยังอยู่ที่: {recoveryPath}";
             SetStatus($"บันทึก MP4 ไม่สำเร็จ: {error.Message}", true);
-            MessageBox.Show(this, error.Message, "SnapCraft", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, detail, "SnapCraft", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {

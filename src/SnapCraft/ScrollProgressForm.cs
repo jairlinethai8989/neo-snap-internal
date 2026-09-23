@@ -2,6 +2,8 @@ namespace SnapCraft;
 
 internal sealed class ScrollProgressForm : Form
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowDisplayAffinity(IntPtr window, uint affinity);
     private readonly Label label = new() { AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Width = 224, Dock = DockStyle.Left };
     private readonly Button finish = new() { Text = "เสร็จ", Width = 57, Dock = DockStyle.Right };
     private readonly Button manual = new() { Text = "เลื่อนเอง", Width = 82, Dock = DockStyle.Right };
@@ -9,6 +11,16 @@ internal sealed class ScrollProgressForm : Form
     public bool FinishRequested { get; private set; }
     public bool CancelRequested { get; private set; }
     public bool Manual { get; private set; }
+    protected override bool ShowWithoutActivation => true;
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var parameters = base.CreateParams;
+            parameters.ExStyle |= 0x08000000;
+            return parameters;
+        }
+    }
 
     public ScrollProgressForm(Rectangle target)
     {
@@ -38,7 +50,15 @@ internal sealed class ScrollProgressForm : Form
         Controls.Add(manual);
         var screen = Screen.FromRectangle(target).WorkingArea;
         StartPosition = FormStartPosition.Manual;
-        Location = new Point(screen.Right - Width - 16, screen.Top + 16);
+        var candidates = new[]
+        {
+            new Point(screen.Right - Width - 16, screen.Top + 16),
+            new Point(screen.Right - Width - 16, screen.Bottom - Height - 16),
+            new Point(screen.Left + 16, screen.Top + 16),
+            new Point(screen.Left + 16, screen.Bottom - Height - 16)
+        };
+        Location = candidates.FirstOrDefault(point => !new Rectangle(point, Size).IntersectsWith(target), candidates[0]);
+        Shown += (_, _) => SetWindowDisplayAffinity(Handle, 0x11);
     }
 
     public void UpdateProgress(int count, int height, string? note = null)

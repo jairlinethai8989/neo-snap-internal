@@ -34,7 +34,7 @@ try {
     $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\SnapCraft'
     New-Item -Path $reg -Force | Out-Null
     New-ItemProperty -Path $reg -Name DisplayName -Value 'SnapCraft Capture' -PropertyType String -Force | Out-Null
-    New-ItemProperty -Path $reg -Name DisplayVersion -Value '0.1.0' -PropertyType String -Force | Out-Null
+    New-ItemProperty -Path $reg -Name DisplayVersion -Value '0.1.1' -PropertyType String -Force | Out-Null
     New-ItemProperty -Path $reg -Name Publisher -Value 'SnapCraft' -PropertyType String -Force | Out-Null
     New-ItemProperty -Path $reg -Name InstallLocation -Value $target -PropertyType String -Force | Out-Null
     New-ItemProperty -Path $reg -Name UninstallString -Value $uninstallCommand -PropertyType String -Force | Out-Null
