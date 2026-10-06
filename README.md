@@ -1,6 +1,6 @@
 # Neo Snap for Windows
 
-Standalone Windows capture app. The Chrome extension is not required. This build targets Windows 10 (2004+) and Windows 11, x64.
+Internal Windows screen capture and image annotation app for company use. Standalone Windows capture app; the Chrome extension is not required. This build targets Windows 10 (2004+) and Windows 11, x64.
 
 ## Install
 
