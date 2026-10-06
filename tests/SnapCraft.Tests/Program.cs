@@ -3,14 +3,113 @@ using System.Drawing.Imaging;
 using System.IO;
 using SnapCraft;
 
+Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+Application.EnableVisualStyles();
 var root = Path.Combine(AppContext.BaseDirectory, "test-output");
 Directory.CreateDirectory(root);
+if (args.Contains("--profile-only"))
+{
+    Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", null);
+    ProductProfileTest.Run(verifyDefaultDataPath: true);
+    LocalizationTest.Run();
+    return;
+}
+Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
+WebAssets.Prepare();
+ProductProfileTest.Run();
+LocalizationTest.Run();
+StartupTest.RunAssets(root);
+CaptureSettingsTest.Run();
+await PerformanceTraceTest.RunAsync();
+await ImageSaveTest.RunAsync(root);
+await ImageImportTest.RunAsync(root);
+await VideoClipTest.RunAsync(root);
 TestStitcher(root);
 Console.WriteLine("stitcher: pass");
+TestFrozenRows(root);
+TestFrozenRows(root, 28);
+TestFrozenRows(root, 64);
+Console.WriteLine("large frozen headers: pass");
+if (args.Contains("--lark-chrome"))
+{
+    var index = Array.IndexOf(args, "--lark-chrome");
+    ScrollFooterTest.RunCapturedChrome(root, args[index + 1], args[index + 2]);
+}
+ScrollFooterTest.Run(root);
+CaptureCoordinatesTest.Run();
+SheetViewportTest.Run();
+Console.WriteLine("sheet viewport / original scale / document exclusion: pass");
+if (args.Contains("--provided-sheet"))
+{
+    using var fixture = new Bitmap(args[Array.IndexOf(args, "--provided-sheet") + 1]);
+    var region = SheetViewportDetector.Find(fixture) ?? throw new Exception("Provided sheet was not detected");
+    Console.WriteLine($"provided sheet: {fixture.Width}x{fixture.Height} -> {region}, original width retained");
+}
+if (args.Contains("--window-fast"))
+{
+    Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
+    await WindowCaptureSmokeTest.RunAsync(root);
+}
+if (!GlobalHotkey.IsValid(6, 83) || GlobalHotkey.IsValid(4, 83) || GlobalHotkey.IsValid(6, 123) || GlobalHotkey.IsValid(8, 83))
+    throw new Exception("Hotkey validation failed");
+Console.WriteLine("hotkey validation: pass");
+HotkeyTest.Run();
+Console.WriteLine("native hotkey registration / collision / cleanup: pass");
 TestFrameValidator();
 Console.WriteLine("frame validator: pass");
 TestCapturedFixtures();
 Console.WriteLine("captured fixture: pass");
+foreach (var audio in new[] { new VideoAudio(), new VideoAudio(true), new VideoAudio(false, true), new VideoAudio(true, true) })
+{
+    var options = VideoSession.CreateAudioOptions(audio);
+    if (options.IsAudioEnabled != (audio.System || audio.Microphone)) throw new Exception("Incorrect audio enable setting");
+    if (options.AudioSources.Count != (audio.System ? 1 : 0) + (audio.Microphone ? 1 : 0)) throw new Exception("Incorrect audio sources");
+}
+Console.WriteLine("video audio options: pass");
+var recordingArgs = FfmpegVideoSession.RecordingArguments(new Rectangle(-1200, 20, 621, 401), "test.mp4");
+if (!recordingArgs.Contains("gdigrab") || !recordingArgs.Contains("-1200") || !recordingArgs.Contains("libx264") || !recordingArgs.Contains("pad=ceil(iw/2)*2:ceil(ih/2)*2"))
+    throw new Exception("CPU capture arguments are incomplete");
+Console.WriteLine("CPU capture arguments: pass");
+if (args.Contains("--video-cpu"))
+{
+    Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
+    await VideoCpuSmokeTest.RunAsync(root);
+}
+if (args.Contains("--video-preview")) await VideoPreviewSmokeTest.RunAsync(root);
+if (args.Contains("--recording-preview")) await RecordingPreviewTest.RunAsync(root);
+if (args.Contains("--hover"))
+{
+    await ScrollHoverSmokeTest.RunAsync();
+    Console.WriteLine("scroll hover detection: pass");
+}
+if (args.Contains("--editor"))
+{
+    Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
+    await EditorTabsSmokeTest.RunAsync(root);
+    Console.WriteLine("native editor tabs / close / cleanup: pass");
+}
+if (args.Contains("--projects"))
+{
+    await ProjectWorkspaceTest.RunAsync(root);
+    Console.WriteLine("native multi-image tabs / source independence / project round-trip / atomic save / close safety: pass");
+}
+if (args.Contains("--launcher") || args.Contains("--input-latency") || args.Contains("--tray-startup"))
+{
+    Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
+    await StartupTest.RunLauncherAsync(args.Contains("--input-latency"), args.Contains("--tray-startup"));
+    Console.WriteLine("native launcher / close-to-tray / single click / minimize restore: pass");
+}
+if (args.Contains("--exit-editors"))
+{
+    Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
+    await EditorExitSmokeTest.RunAsync(root);
+    Console.WriteLine("application exit / open editor confirmation / cancel / kept image cleanup: pass");
+}
+if (args.Contains("--single-instance"))
+{
+    await StartupTest.RunSingleInstanceAsync(root);
+    Console.WriteLine("real process single-instance / hidden + minimized foreground restoration: pass");
+}
 if (args.Contains("--assets"))
 {
     Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
@@ -41,11 +140,11 @@ if (args.Contains("--capture"))
     }
     catch (Exception error) { Console.WriteLine($"video unavailable in test session: {error.Message}"); }
 }
-if (args.Contains("--scroll"))
+if (args.Contains("--scroll") || args.Contains("--scroll-esc"))
 {
     Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
     WebAssets.Prepare();
-    await ScrollSmokeTest.RunAsync(root);
+    await ScrollSmokeTest.RunAsync(root, args.Contains("--scroll-esc"));
     Console.WriteLine("scroll smoke: pass");
 }
 
@@ -109,6 +208,46 @@ static void TestFrameValidator()
         graphics.FillRectangle(Brushes.White, 10, 10, 20, 20);
     }
     if (CaptureFrameValidator.IsBlank(content)) throw new Exception("Dark content was rejected");
+}
+
+static void TestFrozenRows(string root, int footer = 0)
+{
+    const int width = 480, height = 640, header = 260, shift = 150;
+    using var body = new Bitmap(width, 1200, PixelFormat.Format32bppArgb);
+    using (var g = Graphics.FromImage(body))
+    {
+        g.Clear(Color.White);
+        using var font = new Font("Segoe UI", 12);
+        for (var y = 0; y < body.Height; y += 29)
+        {
+            g.DrawString($"Row {y} - {y * 719 % 997}", font, Brushes.Black, 10 + y % 43, y);
+            g.DrawLine(Pens.LightGray, 0, y + 25, width, y + 25);
+        }
+    }
+    using var stitcher = new ScrollStitcher();
+    for (var index = 0; index < 5; index++)
+    {
+        using var tile = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(tile))
+        {
+            g.Clear(Color.RoyalBlue);
+            using var font = new Font("Segoe UI", 15);
+            g.DrawString("FROZEN TITLE AND COLUMN HEADERS", font, Brushes.White, 8, 25);
+            g.DrawImage(body, new Rectangle(0, header, width, height - header - footer), new Rectangle(0, index * shift, width, height - header - footer), GraphicsUnit.Pixel);
+            if (footer > 0) g.FillRectangle(Brushes.LightGray, 0, height - footer, width, footer);
+        }
+        if (stitcher.Add(tile) != TileResult.Added) throw new Exception($"Frozen rows failed at tile {index}");
+    }
+    var path = Path.Combine(root, $"frozen-rows-footer-{footer}.png");
+    stitcher.Save(path);
+    using var output = new Bitmap(path);
+    if (output.Height != height + shift * 4) throw new Exception("Frozen rows: wrong height");
+    if (output.GetPixel(2, 2).ToArgb() != Color.RoyalBlue.ToArgb()) throw new Exception("Frozen header lost");
+    if (footer > 0 && output.GetPixel(2, output.Height - 2).ToArgb() != Color.LightGray.ToArgb()) throw new Exception("Footer lost");
+    for (var y = header; y < output.Height - footer; y += 3)
+        for (var x = 0; x < width; x += 7)
+            if (output.GetPixel(x, y).ToArgb() != body.GetPixel(x, y - header).ToArgb())
+                throw new Exception($"Frozen rows: missing/duplicated content at {x},{y}");
 }
 
 static void TestCapturedFixtures()

@@ -22,10 +22,29 @@ internal static class NativeInput
     [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(PointNative point);
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr handle, uint flags);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr handle, out RectNative rectangle);
+    [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr handle, out RectNative rectangle);
+    [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr handle, ref PointNative point);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out RectNative value, int size);
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr handle);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern uint SendInput(uint count, ref Input input, int size);
+    private delegate bool EnumWindowProc(IntPtr handle, IntPtr data);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowProc callback, IntPtr data);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr handle);
+
+    public static IntPtr WindowBelow(Point point, IntPtr excluded)
+    {
+        var found = IntPtr.Zero;
+        EnumWindows((handle, _) =>
+        {
+            if (handle == excluded || !IsWindowVisible(handle) || !GetWindowRect(handle, out var rect)) return true;
+            if (point.X < rect.Left || point.X >= rect.Right || point.Y < rect.Top || point.Y >= rect.Bottom) return true;
+            found = handle;
+            return false;
+        }, IntPtr.Zero);
+        return found;
+    }
 
     public static IntPtr RootWindowAt(Point point) => GetAncestor(WindowFromPoint(new PointNative { X = point.X, Y = point.Y }), 2);
 
@@ -33,6 +52,14 @@ internal static class NativeInput
     {
         if (!GetWindowRect(handle, out var rect)) throw new InvalidOperationException("อ่านขอบหน้าต่างไม่ได้");
         return Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
+    }
+
+    public static Rectangle ClientBounds(IntPtr handle)
+    {
+        if (!GetClientRect(handle, out var rect)) return VisibleWindowBounds(handle);
+        var point = new PointNative();
+        if (!ClientToScreen(handle, ref point)) return VisibleWindowBounds(handle);
+        return new Rectangle(point.X, point.Y, rect.Right - rect.Left, rect.Bottom - rect.Top);
     }
 
     public static Rectangle VisibleWindowBounds(IntPtr handle)
@@ -63,8 +90,9 @@ internal static class NativeInput
 
     public static void FocusWindow(IntPtr handle)
     {
-        if (handle != IntPtr.Zero) SetForegroundWindow(handle);
+        if (handle != IntPtr.Zero && GetForegroundWindow() != handle) SetForegroundWindow(handle);
     }
+
 
     public static void WheelDown(Point point, int notches = 5)
     {

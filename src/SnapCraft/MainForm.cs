@@ -15,47 +15,110 @@ internal sealed class MainForm : Form
     private VideoSession? video;
     private readonly System.Windows.Forms.Timer recordingTimer = new() { Interval = 250 };
     private readonly NotifyIcon tray = new();
+    private readonly ContextMenuStrip trayMenu = new();
+    private ToolStripMenuItem startupMenuItem = null!;
+    private readonly Label loading = new() { Dock = DockStyle.Fill, Text = "กำลังเตรียม Neo Snap…", TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.White };
+    private Task<bool>? cpuAvailability;
     private bool busy;
     private bool videoStarting;
-    private bool closingAfterVideo;
+    private bool exitRequested;
+    private ShortcutManager? shortcuts;
+    private RecordingStatusForm? recordingStatus;
+    private CancellationTokenSource? videoCountdown;
+    private bool videoStopping;
+    private readonly HashSet<EditorHubForm> editors = new();
+    private readonly HashSet<VideoPreviewForm> videoPreviews = new();
+    private bool exitInProgress;
+    private bool exitApproved;
+    private readonly Task assetsPrepared;
+    private readonly System.Diagnostics.Stopwatch startupClock = System.Diagnostics.Stopwatch.StartNew();
 
-    public MainForm()
+    private bool suppressInitialShow;
+
+    protected override void SetVisibleCore(bool value)
     {
-        Text = "SnapCraft";
+        if (suppressInitialShow && value)
+        {
+            suppressInitialShow = false;
+            _ = Handle;
+            base.SetVisibleCore(false);
+            return;
+        }
+        base.SetVisibleCore(value);
+    }
+
+    public MainForm(bool startInTray = false)
+    {
+        Localization.SetLanguage(settings.Language);
+        loading.Text = Localization.Translate(loading.Text);
+        suppressInitialShow = startInTray;
+        assetsPrepared = Task.Run(() => { using var timing = PerformanceTrace.Measure("startup.assets"); WebAssets.Prepare(); });
+        Text = $"{AppInfo.ProductName} {AppInfo.Version}";
         Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "icons", "app.ico"));
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
-        TopMost = true;
-        ClientSize = new Size(466, 200);
+        TopMost = false;
+        ClientSize = new Size(380, 156);
         Controls.Add(web);
-        Shown += async (_, _) => await InitializeBrowserAsync();
+        Controls.Add(loading);
+        loading.BringToFront();
+        Shown += async (_, _) =>
+        {
+            PerformanceTrace.Record("launcher.visible", startupClock.Elapsed.TotalMilliseconds);
+            await InitializeBrowserAsync();
+        };
         recordingTimer.Tick += (_, _) =>
         {
-            if (video?.FailureMessage is not null)
+            if (video?.FailureMessage is string failure)
             {
                 recordingTimer.Stop();
-                _ = StopVideoAsync(false);
+                _ = StopVideoAsync(false, failure);
             }
-            else if (video is not null) Send(new { type = "elapsed", text = (DateTime.Now - video.StartedAt).ToString(@"hh\:mm\:ss") });
+            else if (video is not null)
+            {
+                var elapsed = DateTime.Now - video.StartedAt;
+                Send(new { type = "elapsed", text = elapsed.ToString(@"hh\:mm\:ss") });
+                recordingStatus?.UpdateElapsed(elapsed);
+            }
         };
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("เปิด SnapCraft", null, (_, _) => ShowLauncher());
-        menu.Items.Add("หยุดและบันทึก MP4", null, async (_, _) => await StopVideoAsync(true));
-        menu.Items.Add("ยกเลิกวิดีโอ", null, async (_, _) => await StopVideoAsync(false));
+        trayMenu.Items.Add(Localization.Translate("เปิด Neo Snap"), null, (_, _) => ShowLauncher());
+        startupMenuItem = new ToolStripMenuItem(Localization.Translate("เริ่มพร้อม Windows")) { Checked = StartupRegistration.Enabled, CheckOnClick = true };
+        startupMenuItem.Click += (_, _) =>
+        {
+            try { StartupRegistration.SetEnabled(startupMenuItem.Checked); }
+            catch (Exception error) { startupMenuItem.Checked = StartupRegistration.Enabled; MessageBox.Show(Localization.Translate(error.Message), AppInfo.ProductName); }
+        };
+        trayMenu.Items.Add(startupMenuItem);
+        trayMenu.Items.Add(Localization.Translate("หยุดและบันทึก MP4"), null, async (_, _) => await StopVideoAsync(true));
+        trayMenu.Items.Add(Localization.Translate("ยกเลิกวิดีโอ"), null, async (_, _) => await StopVideoAsync(false));
+        trayMenu.Items.Add(Localization.Translate("ออกจาก Neo Snap"), null, (_, _) => { exitRequested = true; Close(); });
         tray.Icon = Icon;
-        tray.Text = "SnapCraft";
-        tray.ContextMenuStrip = menu;
+        tray.Text = AppInfo.ProductName;
+        tray.ContextMenuStrip = trayMenu;
+        tray.Visible = true;
         tray.DoubleClick += (_, _) => ShowLauncher();
+        tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowLauncher(); };
         FormClosing += async (_, e) =>
         {
-            if (videoStarting) { e.Cancel = true; return; }
-            if (video is not null && !closingAfterVideo)
+            if (e.CloseReason == CloseReason.UserClosing && !exitRequested) { e.Cancel = true; Hide(); return; }
+            if (!exitApproved)
             {
                 e.Cancel = true;
-                await StopVideoAsync(false);
-                closingAfterVideo = true;
-                Close();
+                if (exitInProgress) return;
+                if (busy || videoStarting || videoStopping) { videoCountdown?.Cancel(); exitRequested = false; return; }
+                exitInProgress = true;
+                try
+                {
+                    foreach (var editor in editors.ToArray())
+                        if (!await editor.RequestCloseAsync()) { exitRequested = false; return; }
+                    if (video is not null) await StopVideoAsync(true);
+                    foreach (var preview in videoPreviews.ToArray())
+                        if (!await preview.RequestCloseAsync()) { exitRequested = false; return; }
+                    exitApproved = true;
+                    Close();
+                }
+                finally { exitInProgress = false; }
                 return;
             }
             tray.Visible = false;
@@ -67,16 +130,21 @@ internal sealed class MainForm : Form
     {
         try
         {
-            var env = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(WebAssets.DataRoot, "WebView2"));
-            await web.EnsureCoreWebView2Async(env);
+            var env = await BrowserEnvironment.GetAsync();
+            if (IsDisposed) return;
+            using (PerformanceTrace.Measure("launcher.controller")) await web.EnsureCoreWebView2Async(env);
+            await assetsPrepared;
+            if (IsDisposed) return;
             web.CoreWebView2.SetVirtualHostNameToFolderMapping("snapcraft.local", WebAssets.WebRoot, CoreWebView2HostResourceAccessKind.DenyCors);
             web.CoreWebView2.WebMessageReceived += async (_, args) => await HandleMessageAsync(args.WebMessageAsJson);
-            web.Source = new Uri("https://snapcraft.local/launcher.html");
+            web.CoreWebView2.NavigationCompleted += (_, args) => { if (args.IsSuccess) loading.Hide(); };
+            web.Source = new Uri($"https://snapcraft.local/launcher.html?language={settings.Language}&product={Uri.EscapeDataString(AppInfo.ProductName)}");
             SetWindowDisplayAffinity(Handle, 0x11);
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, $"เปิดหน้าตา SnapCraft ไม่ได้: {error.Message}\nโปรดติดตั้ง Microsoft Edge WebView2 Runtime", "SnapCraft", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (IsDisposed) return;
+            MessageBox.Show(this, Localization.Translate($"เปิดหน้าตา Neo Snap ไม่ได้: {error.Message}\nโปรดติดตั้ง Microsoft Edge WebView2 Runtime"), AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -89,17 +157,63 @@ internal sealed class MainForm : Form
             var action = root.GetProperty("action").GetString();
             switch (action)
             {
-                case "ready": Send(new { type = "settings", delayMs = settings.DelayMs, openMode = settings.OpenMode }); break;
+                case "ready":
+                    PerformanceTrace.Record("launcher.ready", startupClock.Elapsed.TotalMilliseconds);
+                    SendSettings();
+                    _ = RefreshCpuAvailabilityAsync();
+                    _ = Task.Run(() => { try { WebAssets.CleanupCaptures(); } catch (IOException) { } catch (UnauthorizedAccessException) { } });
+                    CleanupVideoClips();
+                    break;
+                case "hotkey":
+                    var modifiers = root.GetProperty("modifiers").GetUInt32();
+                    var key = root.GetProperty("key").GetUInt32();
+                    var mode = root.TryGetProperty("mode", out var modeValue) ? modeValue.GetString()! : "launcher";
+                    var enabled = !root.TryGetProperty("enabled", out var enabledValue) || enabledValue.ValueKind == JsonValueKind.True;
+                    var binding = new ShortcutBinding(modifiers, key, enabled);
+                    shortcuts!.Update(mode, binding);
+                    settings.GetShortcuts()[mode] = binding;
+                    settings.Save();
+                    SendSettings();
+                    SetStatus("บันทึกคีย์ลัดแล้ว");
+                    break;
+                case "installCpu": await InstallCpuAsync(); break;
+                case "layout":
+                    ClientSize = new Size(380, root.GetProperty("expanded").GetBoolean() ? 320 : 156);
+                    var workArea = Screen.FromControl(this).WorkingArea;
+                    Location = new Point(Math.Clamp(Left, workArea.Left, Math.Max(workArea.Left, workArea.Right - Width)),
+                        Math.Clamp(Top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - Height)));
+                    break;
                 case "settings":
                     settings.DelayMs = root.GetProperty("delayMs").GetInt32();
                     settings.OpenMode = root.GetProperty("openMode").GetString() == "tab" ? "tab" : "window";
                     settings.Save();
                     break;
+                case "language":
+                    ChangeLanguage(root.GetProperty("language").GetString() ?? ProductProfile.Current.DefaultLanguage);
+                    break;
                 case "area": await CaptureAsync(CaptureKind.Area); break;
+                case "browseImages":
+                    if (busy || exitInProgress || videoStarting || videoStopping || video is not null) break;
+                    busy = true;
+                    Send(new { type = "busy", value = true });
+                    try
+                    {
+                        await assetsPrepared;
+                        using var images = new OpenFileDialog { Title = Localization.Translate("Neo Snap | เลือกภาพเพื่อแก้ไข"), Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff", Multiselect = true, CheckFileExists = true };
+                        if (images.ShowDialog(this) != DialogResult.OK) break;
+                        foreach (var source in images.FileNames)
+                        {
+                            var temporary = await ImageImport.CopyAsync(source);
+                            try { TopMost = false; OpenEditor(temporary); }
+                            catch { if (File.Exists(temporary)) File.Delete(temporary); throw; }
+                        }
+                    }
+                    finally { busy = false; Send(new { type = "busy", value = false }); }
+                    break;
                 case "window": await CaptureAsync(CaptureKind.Window); break;
                 case "scroll": await CaptureAsync(CaptureKind.Scroll); break;
-                case "videoScreen": await StartVideoAsync(false); break;
-                case "videoWindow": await StartVideoAsync(true); break;
+                case "videoScreen": await StartVideoAsync(false, ReadAudio(root)); break;
+                case "videoWindow": await StartVideoAsync(true, ReadAudio(root)); break;
                 case "stopVideo": await StopVideoAsync(true); break;
                 case "cancelVideo": await StopVideoAsync(false); break;
             }
@@ -107,36 +221,39 @@ internal sealed class MainForm : Form
         catch (Exception error)
         {
             SetStatus(error.Message, true);
-            MessageBox.Show(this, error.Message, "SnapCraft", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, Localization.Translate(error.Message), AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
     private async Task CaptureAsync(CaptureKind kind)
     {
-        if (busy || video is not null) return;
+        if (busy || exitInProgress || videoStarting || videoStopping || video is not null) return;
         busy = true;
+        var mode = kind switch { CaptureKind.Area => "area", CaptureKind.Window => "window", _ => "scroll" };
+        Send(new { type = "captureActivity", mode, value = true });
         Send(new { type = "busy", value = true });
         Hide();
         EditorHubForm? openedEditor = null;
         try
         {
+            await assetsPrepared;
             var path = await capture.CaptureAsync(kind, settings.DelayMs);
             if (path is not null)
             {
                 openedEditor = OpenEditor(path);
-                SetStatus("จับภาพเรียบร้อย");
             }
             else SetStatus("ยกเลิกการจับภาพ");
         }
         catch (Exception error)
         {
             SetStatus(error.Message, true);
-            MessageBox.Show(error.Message, "SnapCraft", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(Localization.Translate(error.Message), AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally
         {
             Show();
             busy = false;
+            Send(new { type = "captureActivity", mode, value = false });
             Send(new { type = "busy", value = false });
             if (openedEditor is not null) { TopMost = false; openedEditor.Activate(); }
         }
@@ -147,83 +264,174 @@ internal sealed class MainForm : Form
         EditorHubForm hub;
         if (settings.OpenMode == "tab")
         {
-            if (tabHub is null || tabHub.IsDisposed) tabHub = new EditorHubForm(ShowLauncher);
+            if (tabHub is null || tabHub.IsDisposed) tabHub = new EditorHubForm(ShowLauncher, () => editors.ToArray(), ChangeLanguage);
             hub = tabHub;
         }
-        else hub = new EditorHubForm(ShowLauncher);
+        else hub = new EditorHubForm(ShowLauncher, () => editors.ToArray(), ChangeLanguage);
+        if (editors.Add(hub)) hub.FormClosed += (_, _) => editors.Remove(hub);
         hub.AddCapture(path);
         hub.Show();
         hub.Activate();
         return hub;
     }
 
-    private async Task StartVideoAsync(bool window)
+    private static VideoAudio ReadAudio(JsonElement root) => new(
+        root.TryGetProperty("systemAudio", out var system) && system.ValueKind == JsonValueKind.True,
+        root.TryGetProperty("microphoneAudio", out var microphone) && microphone.ValueKind == JsonValueKind.True);
+
+    private void SendSettings()
     {
-        if (busy || video is not null) return;
-        IntPtr handle = IntPtr.Zero;
-        if (window)
+        var cpuAvailable = cpuAvailability is not { IsCompletedSuccessfully: true } || cpuAvailability.Result;
+        var bindings = settings.GetShortcuts().Select(entry => new { mode = entry.Key, modifiers = entry.Value.Modifiers, key = entry.Value.Key, enabled = entry.Value.Enabled, error = shortcuts?.Errors.GetValueOrDefault(entry.Key) });
+        Send(new { type = "settings", delayMs = settings.DelayMs, openMode = settings.OpenMode, language = settings.Language, productName = AppInfo.ProductName, version = AppInfo.Version, developer = AppInfo.Developer, cpuAvailable, shortcuts = bindings });
+    }
+
+    private void ChangeLanguage(string language)
+    {
+        settings.Language = language;
+        Localization.SetLanguage(language);
+        settings.Save();
+        RefreshNativeLanguage();
+        foreach (var editor in editors) editor.RefreshLanguage();
+        SendSettings();
+    }
+
+    private void RefreshNativeLanguage()
+    {
+        Text = $"{AppInfo.ProductName} {AppInfo.Version}";
+        loading.Text = Localization.Translate("กำลังเตรียม Neo Snap…");
+        tray.Text = AppInfo.ProductName;
+        if (trayMenu.Items.Count != 5) return;
+        trayMenu.Items[0].Text = Localization.Translate("เปิด Neo Snap");
+        startupMenuItem.Text = Localization.Translate("เริ่มพร้อม Windows");
+        trayMenu.Items[2].Text = Localization.Translate("หยุดและบันทึก MP4");
+        trayMenu.Items[3].Text = Localization.Translate("ยกเลิกวิดีโอ");
+        trayMenu.Items[4].Text = Localization.Translate("ออกจาก Neo Snap");
+    }
+
+    private async Task RefreshCpuAvailabilityAsync()
+    {
+        cpuAvailability ??= Task.Run(() =>
         {
-            Hide();
-            var selected = SelectionOverlay.Choose(SelectionMode.Window);
-            Show();
-            if (selected is null) return;
-            handle = selected.WindowHandle;
-        }
-        var temporaryPath = Path.Combine(WebAssets.DataRoot, "Recordings", $"{Guid.NewGuid():N}.mp4");
-        videoStarting = true;
+            try { FfmpegVideoSession.FindExecutable(); return true; }
+            catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException) { return false; }
+        });
+        var available = await cpuAvailability;
+        if (!IsDisposed) Send(new { type = "cpuAvailability", value = available });
+    }
+
+    private async Task InstallCpuAsync()
+    {
+        if (busy || videoStarting || video is not null) return;
+        if (MessageBox.Show(this, Localization.Translate("ดาวน์โหลดและติดตั้ง FFmpeg จากแพ็กเกจ Gyan.FFmpeg ผ่าน WinGet? ต้องใช้อินเทอร์เน็ตและพื้นที่ดิสก์เพิ่มเติม"), $"{AppInfo.ProductName} • CPU recorder", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        busy = true; Send(new { type = "busy", value = true }); SetStatus("กำลังติดตั้งตัวบันทึก CPU...");
         try
         {
-            video = new VideoSession(handle, temporaryPath);
+            var info = new System.Diagnostics.ProcessStartInfo("winget.exe")
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true
+            };
+            foreach (var arg in new[] { "install", "--id", "Gyan.FFmpeg", "--exact", "--source", "winget", "--silent", "--accept-package-agreements", "--accept-source-agreements" }) info.ArgumentList.Add(arg);
+            using var installer = System.Diagnostics.Process.Start(info) ?? throw new InvalidOperationException("เปิด WinGet ไม่ได้");
+            var output = installer.StandardOutput.ReadToEndAsync(); var error = installer.StandardError.ReadToEndAsync();
+            await installer.WaitForExitAsync(); await output;
+            if (installer.ExitCode != 0) throw new InvalidOperationException($"ติดตั้ง FFmpeg ไม่สำเร็จ: {await error}");
+            cpuAvailability = null;
+            await RefreshCpuAvailabilityAsync();
+            if (cpuAvailability?.Result != true) throw new InvalidOperationException("ติดตั้งแล้วแต่ยังไม่พบ FFmpeg");
+            SetStatus("ติดตั้งตัวบันทึก CPU แล้ว");
+        }
+        finally { busy = false; Send(new { type = "busy", value = false }); }
+    }
+
+    private async Task StartVideoAsync(bool window, VideoAudio audio)
+    {
+        if (busy || exitInProgress || videoStarting || videoStopping || video is not null) return;
+        videoStarting = true;
+        Send(new { type = "busy", value = true });
+        IntPtr handle = IntPtr.Zero;
+        var temporaryPath = Path.Combine(WebAssets.DataRoot, "Recordings", $"{Guid.NewGuid():N}.mp4");
+        try
+        {
+            if (window)
+            {
+                Hide();
+                var selected = await SelectionOverlay.ChooseAsync(SelectionMode.Window);
+                if (selected is null) return;
+                handle = selected.WindowHandle;
+            }
+            Hide();
+            videoCountdown = new CancellationTokenSource();
+            recordingStatus = new RecordingStatusForm(save =>
+            {
+                if (videoStarting) videoCountdown?.Cancel();
+                else _ = StopVideoAsync(save);
+            });
+            recordingStatus.Show();
+            await recordingStatus.CountdownAsync(videoCountdown.Token);
+            videoCountdown.Token.ThrowIfCancellationRequested();
+            if (handle != IntPtr.Zero) NativeInput.FocusWindow(handle);
+            video = new VideoSession(handle, temporaryPath, audio);
             await video.StartAsync();
+            if (videoCountdown.IsCancellationRequested)
+            {
+                await video.StopAsync(false);
+                video.Dispose(); video = null;
+                throw new OperationCanceledException();
+            }
+            recordingStatus.BeginRecording();
             recordingTimer.Start();
             Send(new { type = "recording", value = true });
             tray.Visible = true;
-            SetStatus("กำลังบันทึก MP4");
-            if (!window && !SetWindowDisplayAffinity(Handle, 0x11))
+            SetStatus($"กำลังอัด {video.BackendName}");
+            if (video.BackendName == "CPU / GDI")
             {
-                Hide();
-                tray.ShowBalloonTip(3000, "SnapCraft", "คลิกขวาไอคอนในถาดระบบเพื่อหยุดวิดีโอ", ToolTipIcon.Info);
+                tray.ShowBalloonTip(4000, $"{AppInfo.ProductName} • CPU", Localization.Translate(window ? "จับบริเวณหน้าต่างที่มองเห็น กรุณาอย่าย่อ ย้าย หรือให้หน้าต่างอื่นบัง" : "กำลังใช้โหมดสำรอง CPU เพื่อบันทึก MP4"), ToolTipIcon.Info);
             }
         }
+        catch (OperationCanceledException) { SetStatus("ยกเลิกการเตรียมบันทึก"); }
         catch (Exception error)
         {
             video?.Dispose();
             video = null;
             try { File.Delete(temporaryPath); } catch (IOException) { }
             SetStatus($"บันทึก MP4 ไม่ได้: {error.Message}", true);
-            MessageBox.Show(this, $"เริ่มบันทึก MP4 ไม่ได้: {error.Message}", "SnapCraft", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, Localization.Translate($"เริ่มบันทึก MP4 ไม่ได้: {error.Message}"), AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-        finally { videoStarting = false; }
+        finally
+        {
+            videoStarting = false;
+            videoCountdown?.Dispose(); videoCountdown = null;
+            if (video is null)
+            {
+                recordingStatus?.Dismiss(); recordingStatus?.Dispose(); recordingStatus = null;
+                ShowLauncher();
+                Send(new { type = "busy", value = false });
+            }
+        }
     }
 
-    private async Task StopVideoAsync(bool save)
+    private async Task StopVideoAsync(bool save, string? failure = null)
     {
-        if (video is null) return;
+        if (video is null || videoStopping) return;
+        videoStopping = true;
+        Send(new { type = "busy", value = true });
+        recordingStatus?.Finalizing();
         var active = video;
         video = null;
         recordingTimer.Stop();
         SetStatus("กำลังปิดไฟล์วิดีโอ...");
         string? recoveryPath = null;
+        string? previewPath = null;
         try
         {
             var temporaryPath = await active.StopAsync(save);
+            if (failure is not null) throw new InvalidOperationException(failure);
             if (temporaryPath is null) SetStatus("ยกเลิกวิดีโอ");
             else
             {
                 recoveryPath = temporaryPath;
-                using var dialog = new SaveFileDialog
-                {
-                    Filter = "MP4 video (*.mp4)|*.mp4",
-                    FileName = $"snapcraft-{DateTime.Now:yyyyMMdd-HHmmss}.mp4",
-                    AddExtension = true
-                };
-                if (dialog.ShowDialog(this) == DialogResult.OK)
-                {
-                    await Task.Run(() => File.Copy(temporaryPath, dialog.FileName, true));
-                    SetStatus($"บันทึก MP4 แล้ว: {Path.GetFileName(dialog.FileName)}");
-                }
-                else SetStatus("ไม่ได้บันทึกวิดีโอ");
-                try { File.Delete(temporaryPath); } catch (IOException) { }
+                previewPath = VideoClipStore.Retain(temporaryPath);
                 recoveryPath = null;
             }
         }
@@ -231,19 +439,80 @@ internal sealed class MainForm : Form
         {
             var detail = recoveryPath is null ? error.Message : $"{error.Message}\nคลิปชั่วคราวยังอยู่ที่: {recoveryPath}";
             SetStatus($"บันทึก MP4 ไม่สำเร็จ: {error.Message}", true);
-            MessageBox.Show(this, detail, "SnapCraft", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, Localization.Translate(detail), AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
             active.Dispose();
-            tray.Visible = false;
+            recordingStatus?.Dismiss(); recordingStatus?.Dispose(); recordingStatus = null;
+            videoStopping = false;
             ShowLauncher();
             Send(new { type = "recording", value = false });
+            if (previewPath is not null) OpenVideoPreview(previewPath);
         }
     }
 
-    private void ShowLauncher() { Show(); Activate(); TopMost = true; }
-    private void SetStatus(string text, bool error = false) => Send(new { type = "status", text, error });
+    private void OpenVideoPreview(string path)
+    {
+        var preview = new VideoPreviewForm(path);
+        videoPreviews.Add(preview);
+        preview.FormClosed += (_, _) => videoPreviews.Remove(preview);
+        preview.Show(); preview.Activate();
+    }
+
+    private void CleanupVideoClips()
+    {
+        try
+        {
+            var protectedPaths = videoPreviews.Select(preview => preview.ClipPath).ToList();
+            if (Clipboard.ContainsFileDropList()) protectedPaths.AddRange(Clipboard.GetFileDropList().Cast<string>());
+            _ = Task.Run(() => { try { VideoClipStore.Cleanup(protectedPaths); } catch (IOException) { } catch (UnauthorizedAccessException) { } });
+        }
+        catch (ExternalException) { /* Skip cleanup when the clipboard cannot be inspected safely. */ }
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        shortcuts = new ShortcutManager(Handle, settings.GetShortcuts());
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        shortcuts?.Dispose();
+        shortcuts = null;
+        base.OnHandleDestroyed(e);
+    }
+
+    protected override void WndProc(ref Message message)
+    {
+        var action = shortcuts?.ActionFor(message);
+        if (action is not null && !busy && !exitInProgress && !videoStarting && !videoStopping) _ = ExecuteShortcutAsync(action);
+        base.WndProc(ref message);
+    }
+
+    private async Task ExecuteShortcutAsync(string action)
+    {
+        if (action == "launcher") { ShowLauncher(); return; }
+        if (video is not null) return;
+        Send(new { type = "mode", value = action });
+        if (action == "video") { ShowLauncher(); Send(new { type = "videoPrompt" }); }
+        else await CaptureAsync(action switch { "area" => CaptureKind.Area, "window" => CaptureKind.Window, _ => CaptureKind.Scroll });
+    }
+
+    internal void ShowLauncher()
+    {
+        if (IsDisposed) return;
+        if (busy || videoStarting || videoStopping) { recordingStatus?.Activate(); return; }
+        Show();
+        WindowState = FormWindowState.Normal;
+        TopMost = false;
+        if (video is null) Send(new { type = "idle" });
+        BringToFront();
+        Activate();
+        NativeInput.FocusWindow(Handle);
+    }
+    private void SetStatus(string text, bool error = false) => Send(new { type = "status", text = Localization.Translate(text), error });
     private void Send(object message)
     {
         if (web.CoreWebView2 is not null) web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(message));

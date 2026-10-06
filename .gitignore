@@ -1,6 +1,8 @@
 **/bin/
 **/obj/
+**/bin-snapzy/
 .vs/
 dist/
+tools/node_modules/
 TestResults/
 .build-profile/

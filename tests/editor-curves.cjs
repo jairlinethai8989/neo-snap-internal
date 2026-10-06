@@ -1,0 +1,53 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const http = require('node:http');
+const { chromium } = require('C:/Users/jairlinethai/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const root = path.resolve(__dirname, '../src/SnapCraft/Assets');
+(async () => {
+  const server = http.createServer((req,res) => {
+    const file=path.resolve(root,'.'+new URL(req.url,'http://localhost').pathname);
+    if(!file.startsWith(root+path.sep)||!fs.existsSync(file)) return res.writeHead(404).end();
+    res.setHeader('Content-Type',{'.html':'text/html','.js':'text/javascript','.css':'text/css','.ttf':'font/ttf','.svg':'image/svg+xml','.png':'image/png'}[path.extname(file)]||'application/octet-stream');fs.createReadStream(file).pipe(res);
+  });
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const browser=await chromium.launch();
+  try {
+    const page=await browser.newPage({viewport:{width:1100,height:850}}),errors=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    const fixture=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=800;c.height=500;const x=c.getContext('2d');x.fillStyle='white';x.fillRect(0,0,800,500);return c.toDataURL();});
+    await page.goto(`http://127.0.0.1:${server.address().port}/editor.html?image=${encodeURIComponent(fixture)}`);
+    await page.locator('#loading').waitFor({state:'hidden'});
+    await page.evaluate(()=>{setTool('highlight');setTool('arrow');});
+    assert.equal(await page.locator('#colorInput').inputValue(),'#ef3340','An unused drawing tool defaults to red, not highlighter yellow');
+    assert.equal(await page.locator('#curveHandle').count(),1,'A selected line needs a midpoint bending handle');
+    const b=await page.locator('#canvas').boundingBox();
+    await page.mouse.move(b.x+100,b.y+150);await page.mouse.down();await page.mouse.move(b.x+500,b.y+150);await page.mouse.up();
+    await page.evaluate(()=>setTool('select'));
+    const h=await page.locator('#curveHandle').boundingBox();assert(h);
+    await page.mouse.move(h.x+h.width/2,h.y+h.height/2);await page.mouse.down();await page.mouse.move(b.x+300,b.y+300,{steps:8});await page.mouse.up();
+    const result=await page.evaluate(()=>{const i=objects[0];render(false);const pixel=[...ctx.getImageData(300,300,1,1).data];render();return {curve:i.curve,box:bounds(i),hit:hitTest({x:300,y:300},i),miss:hitTest({x:300,y:150},i),pixel};});
+    assert.deepEqual(result.curve,{x:300,y:450});assert.equal(result.box.height,150);assert(result.hit&&!result.miss);assert(result.pixel[0]>200&&result.pixel[1]<100,'Curve must render through dragged midpoint');
+    await page.locator('#undoButton').click();assert.equal(await page.evaluate(()=>objects[0].curve),undefined);
+    await page.locator('#redoButton').click();assert.deepEqual(await page.evaluate(()=>objects[0].curve),result.curve);
+    await page.evaluate(async()=>{const p=exportProject().project;await loadProject(p);selected=0;setTool('select');});
+    assert.deepEqual(await page.evaluate(()=>objects[0].curve),result.curve);
+    const moved=await page.evaluate(()=>{const i=objects[0],o=structuredClone(i);moveItem(i,o,20,10);return i.curve;});assert.deepEqual(moved,{x:320,y:460});
+    await page.evaluate(()=>{const i=objects[0],o=structuredClone(i),b=resizeBounds(o);resizeItem(i,o,{x:b.x+b.width*.5,y:b.y+b.height*.5});});
+    assert.deepEqual(await page.evaluate(()=>objects[0].curve),{x:220,y:310});
+    const rejected=await page.evaluate(async()=>{const p=exportProject().project;p.objects[0].curve.x='bad';try{await loadProject(p);return false;}catch{return true;}});assert(rejected);
+    await page.evaluate(()=>{objects[0].tool='line';selected=0;render();});
+    await page.locator('#curveHandle').focus();await page.keyboard.press('Shift+ArrowDown');
+    assert.equal(await page.evaluate(()=>curvePoint(objects[0]).y),245,'Keyboard midpoint movement follows the curve');
+    await page.evaluate(()=>{const i=objects[0],p=curvePoint(i);i.stroke='dashed';i.shadow={enabled:true,color:'#000000',blur:6,x:4,y:4};render(false);render();});
+    assert.equal(await page.locator('#curveHandle').isVisible(),true);
+    const transform=await page.evaluate(async()=>{const p=exportProject().project;await combineProjects([p,p],'horizontal',16);const curved=objects.filter(o=>o.curve);return {first:curved[0].curve,second:curved[1].curve};});
+    assert.equal(transform.second.x-transform.first.x,816,'Combined image translates the curve with its annotation');
+    await page.evaluate(()=>{selected=objects.findIndex(o=>o.curve);render();});await page.screenshot({path:path.resolve(__dirname,'../dist/curve-preview.png')});
+    await page.setViewportSize({width:480,height:720});
+    await page.locator('#curveHandle').waitFor({state:'visible'});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Narrow editor must not overflow');
+    await page.screenshot({path:path.resolve(__dirname,'../dist/curve-preview-narrow.png')});
+    assert.deepEqual(errors,[]);console.log('PASS red defaults / curve handle / rendered curve / hit testing / undo / project / movement / resize / validation');
+  }finally{await browser.close();await new Promise(r=>server.close(r));}
+})().catch(e=>{console.error(e);process.exitCode=1;});

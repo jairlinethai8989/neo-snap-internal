@@ -9,35 +9,70 @@ internal sealed class CaptureBackend
     public async Task<string> CaptureWindowAsync(IntPtr handle, CancellationToken cancellationToken = default)
     {
         if (handle == IntPtr.Zero) throw new ArgumentException("ไม่ได้เลือกหน้าต่าง");
+        cancellationToken.ThrowIfCancellationRequested();
+        NativeInput.FocusWindow(handle);
+        await Task.Delay(80, cancellationToken);
         try
         {
-            return await CaptureVerifiedAsync(() => new WindowRecordingSource(handle) { IsCursorCaptureEnabled = false }, cancellationToken);
+            using var timing = PerformanceTrace.Measure("capture.window");
+            using var image = await CaptureRegionAsync(Rectangle.Intersect(NativeInput.VisibleWindowBounds(handle), SystemInformation.VirtualScreen), cancellationToken);
+            var path = WebAssets.NewCapturePath();
+            await Task.Run(() => image.Save(path, System.Drawing.Imaging.ImageFormat.Png), cancellationToken);
+            return path;
         }
         catch (Exception firstError) when (firstError is not OperationCanceledException)
         {
-            var bounds = NativeInput.VisibleWindowBounds(handle);
-            var screen = Screen.FromRectangle(bounds);
-            if (!screen.Bounds.Contains(bounds))
-                throw new InvalidOperationException($"จับหน้าต่างไม่ได้: {firstError.Message} หน้าต่างต้องอยู่ภายในจอเดียวเพื่อลองวิธีสำรอง", firstError);
-            var displayPath = await CaptureDisplayAsync(screen.DeviceName, cancellationToken);
+            try { return await CaptureVerifiedAsync(() => new WindowRecordingSource(handle) { IsCursorCaptureEnabled = false }, cancellationToken); }
+            catch (Exception fallbackError) when (fallbackError is not OperationCanceledException)
+            { throw new InvalidOperationException($"จับหน้าต่างไม่ได้: {firstError.Message}; {fallbackError.Message}", fallbackError); }
+        }
+    }
+
+    public async Task<Bitmap> CaptureRegionAsync(Rectangle region, CancellationToken cancellationToken = default)
+    {
+        if (region.Width < 20 || region.Height < 20 || !SystemInformation.VirtualScreen.Contains(region))
+            throw new InvalidOperationException("กรอบจับภาพต้องอยู่ภายในพื้นที่หน้าจอที่มองเห็น");
+        try
+        {
+            return await Task.Run(() =>
+            {
+                using var timing = PerformanceTrace.Measure("capture.screen-copy");
+                var image = new Bitmap(region.Width, region.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                try
+                {
+                    using var graphics = Graphics.FromImage(image);
+                    graphics.CopyFromScreen(region.Location, Point.Empty, region.Size);
+                    // A successful screen copy can legitimately contain an entirely black region.
+                    // Blank-frame retries are reserved for GPU recorder startup below.
+                    return image;
+                }
+                catch { image.Dispose(); throw; }
+            }, cancellationToken);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            PerformanceTrace.Record("capture.gpu-fallback", 0);
+            var screen = Screen.FromRectangle(region);
+            if (!screen.Bounds.Contains(region)) throw;
+            var raw = await CaptureDisplayAsync(screen.DeviceName, cancellationToken);
             try
             {
-                using var display = new Bitmap(displayPath);
-                var scaleX = (double)display.Width / screen.Bounds.Width;
-                var scaleY = (double)display.Height / screen.Bounds.Height;
-                var crop = new Rectangle(
-                    (int)Math.Round((bounds.Left - screen.Bounds.Left) * scaleX),
-                    (int)Math.Round((bounds.Top - screen.Bounds.Top) * scaleY),
-                    (int)Math.Round(bounds.Width * scaleX),
-                    (int)Math.Round(bounds.Height * scaleY));
-                crop = Rectangle.Intersect(crop, new Rectangle(Point.Empty, display.Size));
-                using var window = display.Clone(crop, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-                var path = WebAssets.NewCapturePath();
-                window.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-                return path;
+                using var display = new Bitmap(raw);
+                // Only the GPU fallback needs coordinate mapping; normal capture copies exact screen pixels.
+                var crop = MapDisplayRegion(region, screen.Bounds, display.Size);
+                return display.Clone(crop, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             }
-            finally { File.Delete(displayPath); }
+            finally { File.Delete(raw); }
         }
+    }
+
+    internal static Rectangle MapDisplayRegion(Rectangle region, Rectangle screen, Size display)
+    {
+        var left = (int)Math.Round((double)(region.Left - screen.Left) * display.Width / screen.Width);
+        var top = (int)Math.Round((double)(region.Top - screen.Top) * display.Height / screen.Height);
+        var right = (int)Math.Round((double)(region.Right - screen.Left) * display.Width / screen.Width);
+        var bottom = (int)Math.Round((double)(region.Bottom - screen.Top) * display.Height / screen.Height);
+        return Rectangle.Intersect(Rectangle.FromLTRB(left, top, right, bottom), new Rectangle(Point.Empty, display));
     }
 
     public async Task<string> CaptureDisplayAsync(string deviceName, CancellationToken cancellationToken = default)
@@ -102,7 +137,7 @@ internal sealed class CaptureBackend
         try
         {
             recorder.Record(path);
-            return await completion.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+            return await completion.Task.WaitAsync(TimeSpan.FromSeconds(3), cancellationToken);
         }
         catch
         {

@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 using SnapCraft;
@@ -13,7 +14,7 @@ internal static class ScrollSmokeTest
         }
     }
 
-    public static async Task RunAsync(string root)
+    public static async Task RunAsync(string root, bool stopEarly = false)
     {
         var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
@@ -68,7 +69,7 @@ internal static class ScrollSmokeTest
                             throw new Exception("Window MP4 was not written");
                         Console.WriteLine("window video: pass");
                     }
-                    var region = panel.RectangleToScreen(new Rectangle(0, 0, 190, panel.ClientSize.Height));
+                    var region = panel.RectangleToScreen(panel.ClientRectangle);
                     var frame = 0;
                     var path = await new CaptureCoordinator().CaptureScrollAsync(new CaptureSelection(region, form.Handle),
                         (tile, count, result, height) =>
@@ -76,13 +77,16 @@ internal static class ScrollSmokeTest
                             frame++;
                             Console.WriteLine($"tile: {count}, {result}, {height} px");
                             if (frame <= 4) tile.Save(Path.Combine(root, $"tile-{frame}.png"));
+                            if (stopEarly && count == 3 && result == TileResult.Added) SendKeys.SendWait("{ESC}");
                         });
                     if (path is null) throw new Exception("Scroll capture was canceled");
                     using var image = new Bitmap(path);
-                    if (image.Height < region.Height * 2)
+                    if (image.Width != region.Width) throw new Exception("Long capture changed the original viewport width");
+                    if (image.Height < region.Height * (stopEarly ? 1.5 : 2))
                         throw new Exception($"Scroll capture stayed on one viewport: {image.Height} px");
-                    if (-panel.AutoScrollPosition.Y < 500)
+                    if (-panel.AutoScrollPosition.Y < (stopEarly ? 400 : 500))
                         throw new Exception("Wheel input did not move the target panel");
+                    if (stopEarly && -panel.AutoScrollPosition.Y > 700) throw new Exception("Esc did not finish the partial capture promptly");
                     completed.TrySetResult(true);
                 }
                 catch (Exception error) { completed.TrySetException(error); }

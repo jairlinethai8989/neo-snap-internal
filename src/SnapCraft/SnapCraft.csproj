@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <Version>0.1.1</Version>
+    <Version>0.1.20</Version>
+    <Product>Neo Snap</Product>
+    <ProductFlavor Condition="'$(ProductFlavor)' == ''">NeoSnap</ProductFlavor>
+    <Authors>jairlinethai</Authors>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
@@ -13,9 +16,18 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ApplicationIcon>Assets\icons\app.ico</ApplicationIcon>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(ProductFlavor)' == 'Snapzy'">
+    <Version>1.0.0</Version>
+    <Product>Snapzy</Product>
+    <DefineConstants>$(DefineConstants);SNAPZY_BUILD</DefineConstants>
+  </PropertyGroup>
+  <Target Name="ValidateProductFlavor" BeforeTargets="PrepareForBuild" Condition="'$(ProductFlavor)' != 'NeoSnap' and '$(ProductFlavor)' != 'Snapzy'">
+    <Error Text="ProductFlavor must be NeoSnap or Snapzy." />
+  </Target>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
     <PackageReference Include="ScreenRecorderLib" Version="7.0.1" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />

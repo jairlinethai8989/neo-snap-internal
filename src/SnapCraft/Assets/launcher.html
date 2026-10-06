@@ -3,14 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SnapCraft</title>
+  <title>Neo Snap</title>
   <link rel="stylesheet" href="launcher.css">
 </head>
 <body>
   <header>
     <img src="icons/icon.svg" alt="">
-    <div class="identity"><strong>SnapCraft</strong><small>Windows Capture</small></div>
+    <div class="identity"><strong>Neo Snap <small id="version">v0.1.20</small></strong><small>Windows Capture</small></div>
     <span id="state" class="state">พร้อมใช้งาน</span>
+    <select id="languageSelect" class="language-select" data-language-select aria-label="Language"><option value="en">English</option><option value="th">ไทย</option></select>
+    <button id="openProject" class="about-button" title="เลือกภาพเพื่อแก้ไข" aria-label="เลือกภาพเพื่อแก้ไข"><i data-lucide="image-plus"></i></button>
+    <button id="shortcutButton" class="about-button" title="ตั้งค่าคีย์ลัด" aria-label="ตั้งค่าคีย์ลัด"><i data-lucide="keyboard"></i></button>
+    <button id="aboutButton" class="about-button" title="เกี่ยวกับ Neo Snap" aria-label="เกี่ยวกับ Neo Snap"><i data-lucide="info"></i></button>
   </header>
   <main>
     <div class="actions" aria-label="จับภาพ">
@@ -33,7 +37,30 @@
       <button id="cancel" title="ยกเลิกวิดีโอ"><i data-lucide="x"></i>ยกเลิก</button>
     </div>
   </main>
+  <dialog id="aboutDialog" class="launcher-dialog">
+    <h2>Neo Snap <small id="aboutVersion">0.1.20</small></h2>
+    <p>ผู้พัฒนา: <b id="developer">jairlinethai</b></p>
+    <p>อัปเดต: <time datetime="2026-10-06">6 ตุลาคม 2026</time></p>
+    <details><summary>มีอะไรใหม่ใน 0.1.20</summary><ul><li>จัดชั้นวัตถุและภาพ ขึ้น–ลงทีละชั้น หรือบนสุด–ล่างสุด</li><li>ย้ายชั้นภาพพร้อมคำอธิบายที่ติดกับภาพ</li><li>รองรับ Undo/Redo และเก็บลำดับชั้นในไฟล์งาน</li></ul></details>
+    <button id="installCpu" hidden>ติดตั้งตัวบันทึก CPU (FFmpeg)</button>
+    <div class="dialog-actions"><button id="closeAbout">ปิด</button></div>
+  </dialog>
+  <dialog id="audioDialog" class="launcher-dialog">
+    <h2>บันทึกเสียงด้วยหรือไม่?</h2>
+    <label><input type="checkbox" id="systemAudio" checked>เสียงจากเครื่อง</label>
+    <label><input type="checkbox" id="microphoneAudio">ไมโครโฟน</label>
+    <div class="dialog-actions"><button id="cancelAudio">ยกเลิก</button><button id="silentVideo">ไม่บันทึกเสียง</button><button id="confirmAudio" class="primary">เริ่มบันทึก</button></div>
+  </dialog>
+  <dialog id="shortcutDialog" class="launcher-dialog">
+    <h2>ตั้งค่าคีย์ลัด</h2>
+    <label>โหมด<select id="hotkeyMode"><option value="launcher">เปิด Neo Snap</option><option value="area">จับภาพเลือกพื้นที่</option><option value="window">จับภาพหน้าต่าง</option><option value="scroll">จับภาพยาว</option><option value="video">บันทึกวิดีโอ</option></select></label>
+    <label><input type="checkbox" id="hotkeyEnabled" checked>เปิดใช้คีย์ลัดนี้</label>
+    <label><input type="checkbox" id="hotkeyCtrl" checked>Ctrl <input type="checkbox" id="hotkeyAlt">Alt <input type="checkbox" id="hotkeyShift" checked>Shift <select id="hotkeyKey" aria-label="ปุ่มคีย์ลัด"></select></label>
+    <p id="hotkeyStatus" role="status"></p>
+    <div class="dialog-actions"><button id="closeShortcut">ยกเลิก</button><button id="saveShortcut" class="primary">บันทึก</button></div>
+  </dialog>
   <script src="vendor/lucide.js"></script>
+  <script src="i18n.js"></script>
   <script src="launcher.js"></script>
 </body>
 </html>

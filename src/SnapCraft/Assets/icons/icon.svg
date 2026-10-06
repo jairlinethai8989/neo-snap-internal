@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="SnapCraft Capture">
-  <rect x="4" y="4" width="120" height="120" rx="27" fill="#14231f"/>
-  <g fill="none" stroke="#f7fbf9" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Neo Snap">
+  <rect x="4" y="4" width="120" height="120" rx="27" fill="#1769ff"/>
+  <g fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
     <path d="M49 36H40a4 4 0 0 0-4 4v9"/>
     <path d="M79 36h9a4 4 0 0 1 4 4v9"/>
     <path d="M36 79v9a4 4 0 0 0 4 4h9"/>
     <path d="M92 79v9a4 4 0 0 1-4 4h-9"/>
   </g>
-  <circle cx="64" cy="64" r="14" fill="#70e5b7"/>
+  <circle cx="64" cy="64" r="14" fill="#7ce2ff"/>
 </svg>

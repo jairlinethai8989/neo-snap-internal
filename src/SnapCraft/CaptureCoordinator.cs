@@ -10,12 +10,18 @@ internal sealed class CaptureCoordinator
 
     public async Task<string?> CaptureAsync(CaptureKind kind, int delayMs)
     {
-        var selection = SelectionOverlay.Choose(kind == CaptureKind.Window ? SelectionMode.Window : SelectionMode.Region);
+        using var totalTiming = PerformanceTrace.Measure("capture.total-including-selection");
+        var selection = await SelectionOverlay.ChooseAsync(kind switch { CaptureKind.Window => SelectionMode.Window, CaptureKind.Scroll => SelectionMode.Scroll, _ => SelectionMode.Region });
         if (selection is null) return null;
         if (kind == CaptureKind.Scroll && selection.WindowHandle == IntPtr.Zero)
             throw new InvalidOperationException("ไม่พบหน้าต่างใต้กรอบที่เลือก");
-        if (delayMs > 0) await Task.Delay(delayMs);
+        if (delayMs > 0)
+        {
+            using var delayTiming = PerformanceTrace.Measure("capture.configured-delay");
+            await Task.Delay(Math.Min(delayMs, 10000));
+        }
         await Task.Delay(120);
+        using var captureTiming = PerformanceTrace.Measure("capture.after-selection");
         return kind switch
         {
             CaptureKind.Area => await CaptureAreaAsync(selection.Region),
@@ -29,7 +35,8 @@ internal sealed class CaptureCoordinator
     {
         using var image = await CaptureVisibleRegionAsync(region);
         var path = WebAssets.NewCapturePath();
-        image.Save(path, ImageFormat.Png);
+        using var timing = PerformanceTrace.Measure("capture.png");
+        await Task.Run(() => image.Save(path, ImageFormat.Png));
         return path;
     }
 
@@ -42,7 +49,7 @@ internal sealed class CaptureCoordinator
         progress.Show();
         NativeInput.FocusWindow(selection.WindowHandle);
         progress.UpdateProgress(0, 0);
-        var point = new Point(selection.Region.Left + selection.Region.Width / 2, selection.Region.Top + selection.Region.Height / 2);
+        var point = new Point(selection.Region.Left + selection.Region.Width / 2, selection.Region.Top + selection.Region.Height * 4 / 5);
         var unchanged = 0;
         var ambiguous = 0;
         var useAutomation = false;
@@ -60,12 +67,22 @@ internal sealed class CaptureCoordinator
                     if (!progress.Manual)
                     {
                         NativeInput.FocusWindow(selection.WindowHandle);
-                        if (!useAutomation || !NativeInput.TryAutomationScroll(point)) NativeInput.WheelDown(point, 3);
+                        var moved = false;
+                        if (useAutomation)
+                        {
+                            try { moved = await Task.Run(() => NativeInput.TryAutomationScroll(point)).WaitAsync(TimeSpan.FromMilliseconds(600)); }
+                            catch (TimeoutException)
+                            {
+                                progress.SetManual(true);
+                                progress.UpdateProgress(stitcher.Count, stitcher.TotalHeight, "ระบบเลื่อนไม่ตอบสนอง: เลื่อนเองหรือ Esc เพื่อจบ");
+                            }
+                        }
+                        if (!progress.Manual && !moved) NativeInput.WheelDown(point, 3);
                     }
                     await Task.Delay(progress.Manual ? 550 : 350);
                 }
                 using var tile = await CaptureVisibleRegionAsync(selection.Region);
-                var result = stitcher.Add(tile);
+                var result = await Task.Run(() => stitcher.Add(tile));
                 observed?.Invoke(tile, stitcher.Count, result, stitcher.TotalHeight);
                 if (result == TileResult.Added)
                 {
@@ -103,35 +120,11 @@ internal sealed class CaptureCoordinator
             }
             if (progress.CancelRequested || stitcher.Count == 0) return null;
             var output = WebAssets.NewCapturePath();
-            stitcher.Save(output);
+            await Task.Run(() => stitcher.Save(output));
             return output;
         }
         finally { progress.Close(); }
     }
 
-    private async Task<Bitmap> CaptureVisibleRegionAsync(Rectangle region)
-    {
-        var screen = Screen.FromRectangle(region);
-        if (!screen.Bounds.Contains(region)) throw new InvalidOperationException("กรอบจับภาพต้องอยู่ภายในจอเดียวกัน");
-        var raw = await backend.CaptureDisplayAsync(screen.DeviceName);
-        try
-        {
-            using var bitmap = new Bitmap(raw);
-            var relative = new Rectangle(region.X - screen.Bounds.X, region.Y - screen.Bounds.Y, region.Width, region.Height);
-            var crop = ScaleRegion(relative, screen.Bounds.Size, bitmap.Size);
-            return bitmap.Clone(crop, PixelFormat.Format32bppArgb);
-        }
-        finally { File.Delete(raw); }
-    }
-
-    private static Rectangle ScaleRegion(Rectangle relative, Size source, Size image)
-    {
-        var x = (int)Math.Round((double)relative.X * image.Width / source.Width);
-        var y = (int)Math.Round((double)relative.Y * image.Height / source.Height);
-        var width = (int)Math.Round((double)relative.Width * image.Width / source.Width);
-        var height = (int)Math.Round((double)relative.Height * image.Height / source.Height);
-        var crop = Rectangle.Intersect(new Rectangle(x, y, width, height), new Rectangle(Point.Empty, image));
-        if (crop.Width < 20 || crop.Height < 20) throw new InvalidOperationException("พื้นที่จับภาพเล็กเกินไป");
-        return crop;
-    }
+    private Task<Bitmap> CaptureVisibleRegionAsync(Rectangle region) => backend.CaptureRegionAsync(region);
 }

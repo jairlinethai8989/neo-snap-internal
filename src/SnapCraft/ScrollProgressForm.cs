@@ -24,7 +24,7 @@ internal sealed class ScrollProgressForm : Form
 
     public ScrollProgressForm(Rectangle target)
     {
-        Text = "SnapCraft | ภาพยาว";
+        Text = "Neo Snap | ภาพยาว";
         FormBorderStyle = FormBorderStyle.FixedToolWindow;
         ShowInTaskbar = false;
         TopMost = true;
