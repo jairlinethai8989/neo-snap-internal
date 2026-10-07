@@ -27,5 +27,24 @@ internal sealed class ShortcutManager : IDisposable
     }
 
     public string? ActionFor(Message message) => bindings.FirstOrDefault(entry => entry.Value.Matches(message)).Key;
+    public void UpdateAndSave(AppSettings settings, string action, ShortcutBinding binding)
+    {
+        var values = settings.GetShortcuts();
+        if (!values.TryGetValue(action, out var previous)) throw new ArgumentException("Unknown shortcut mode.");
+        Update(action, binding);
+        values[action] = binding;
+        try { settings.Save(); }
+        catch (Exception saveError)
+        {
+            values[action] = previous;
+            try { Update(action, previous); }
+            catch (Exception restoreError)
+            {
+                Errors[action] = restoreError.Message;
+                throw new AggregateException("Settings could not be saved and the previous shortcut could not be restored.", saveError, restoreError);
+            }
+            throw;
+        }
+    }
     public void Dispose() { foreach (var hotkey in bindings.Values) hotkey.Dispose(); }
 }

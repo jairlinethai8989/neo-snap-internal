@@ -19,11 +19,12 @@ internal static class ScrollSmokeTest
         var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
+            var screen = Screen.AllScreens.Last().WorkingArea;
             using var form = new Form
             {
                 Text = "SnapCraft scroll smoke",
                 StartPosition = FormStartPosition.Manual,
-                Location = new Point(80, 100),
+                Location = new Point(screen.Left + 80, screen.Top + 100),
                 Size = new Size(780, 540),
                 TopMost = true
             };

@@ -76,7 +76,7 @@ internal static class EditorTabsSmokeTest
                     var saveDialog = IntPtr.Zero;
                     await WaitAsync(() =>
                     {
-                        saveDialog = FindWindow("#32770", "Neo Snap | PNG");
+                        saveDialog = FindWindow("#32770", $"{AppInfo.ProductName} | PNG");
                         if (saveDialog == IntPtr.Zero) return false;
                         GetWindowThreadProcessId(saveDialog, out var processId);
                         return processId == Environment.ProcessId;
@@ -105,6 +105,9 @@ internal static class EditorTabsSmokeTest
                     File.Copy(first, third);
                     editor.Close();
                     editor.AddCapture(third);
+                    await WaitAsync(() => Application.OpenForms.Cast<Form>().Any(form => form.Name == "closeEditorScopeDialog"));
+                    var scope = Application.OpenForms.Cast<Form>().Single(form => form.Name == "closeEditorScopeDialog");
+                    scope.Controls.OfType<Button>().Single(button => button.Name == "closeCurrentWindow").PerformClick();
                     await WaitAsync(() => editor.IsDisposed || Application.OpenForms.Cast<Form>().Any(form => form.Name == "closeImageDialog"));
                     if (editor.IsDisposed || !File.Exists(third)) throw new Exception("A capture added during window close must also be confirmed");
                     prompt = Application.OpenForms.Cast<Form>().Single(form => form.Name == "closeImageDialog");

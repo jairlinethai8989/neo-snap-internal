@@ -1,4 +1,11 @@
 const host = window.chrome?.webview;
+const previewProduct = new URLSearchParams(location.search).get('product')?.toLowerCase() === 'snapzy' ? 'SnapZy' : 'Neo Snap';
+const previewI18n = SnapCraftI18n.init({productName: previewProduct, language: new URLSearchParams(location.search).get('language') || (previewProduct === 'SnapZy' ? 'en' : 'th')});
+document.querySelector('.brand-link b').textContent = previewProduct;
+const refreshPreviewTitle = () => document.title = `${previewProduct} | ${SnapCraftI18n.translateText('วิดีโอ', document.documentElement.lang)}`;
+document.addEventListener('snapcraft:language', refreshPreviewTitle);
+refreshPreviewTitle();
+if (previewProduct === 'SnapZy') document.querySelector('.brand-link img').src = 'icons/snapzy.svg';
 const video = document.querySelector('#clipVideo');
 const status = document.querySelector('#clipStatus');
 const buttons = [...document.querySelectorAll('.clip-actions button')];
@@ -20,6 +27,7 @@ for (const action of ['copyClip', 'saveClip']) document.getElementById(action).o
 };
 host?.addEventListener('message', event => {
   const message = event.data;
+  if (message.type === 'language') previewI18n.setLanguage(message.language);
   if (message.type === 'result') result(message.action, message.success, message.text);
 });
 let dragStart;

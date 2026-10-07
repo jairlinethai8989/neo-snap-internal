@@ -29,26 +29,28 @@ const roots = [path.resolve(__dirname, '../src/SnapCraft/Assets'), ...(process.a
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    const svg = fs.readFileSync(path.join(roots[0], 'icons/icon.svg'));
-    const pngs = [];
-    for (const size of [16, 32, 48, 128, 256]) {
-      await page.setContent(`<style>body{margin:0}</style><img width="${size}" height="${size}" src="data:image/svg+xml;base64,${svg.toString('base64')}">`);
-      await page.locator('img').evaluate((img) => img.decode());
-      const png = await page.screenshot({ clip: { x: 0, y: 0, width: size, height: size }, omitBackground: true });
-      pngs.push({ size, png });
-      if (size <= 128) for (const root of roots) fs.writeFileSync(path.join(root, `icons/icon-${size}.png`), png);
+    for (const [name, ico, targets] of [['icon', 'app', roots], ['snapzy', 'snapzy', [roots[0]]]]) {
+      const svg = fs.readFileSync(path.join(roots[0], `icons/${name}.svg`));
+      const pngs = [];
+      for (const size of [16, 32, 48, 128, 256]) {
+        await page.setContent(`<style>body{margin:0}</style><img width="${size}" height="${size}" src="data:image/svg+xml;base64,${svg.toString('base64')}">`);
+        await page.locator('img').evaluate((img) => img.decode());
+        const png = await page.screenshot({ clip: { x: 0, y: 0, width: size, height: size }, omitBackground: true });
+        pngs.push({ size, png });
+        if (size <= 128) for (const root of targets) fs.writeFileSync(path.join(root, `icons/${name}-${size}.png`), png);
+      }
+      const header = Buffer.alloc(6 + pngs.length * 16);
+      header.writeUInt16LE(1, 2); header.writeUInt16LE(pngs.length, 4);
+      let offset = header.length;
+      pngs.forEach(({ size, png }, index) => {
+        const at = 6 + index * 16;
+        header[at] = header[at + 1] = size % 256;
+        header.writeUInt16LE(1, at + 4); header.writeUInt16LE(32, at + 6);
+        header.writeUInt32LE(png.length, at + 8); header.writeUInt32LE(offset, at + 12);
+        offset += png.length;
+      });
+      fs.writeFileSync(path.join(roots[0], `icons/${ico}.ico`), Buffer.concat([header, ...pngs.map((item) => item.png)]));
     }
-    const header = Buffer.alloc(6 + pngs.length * 16);
-    header.writeUInt16LE(1, 2); header.writeUInt16LE(pngs.length, 4);
-    let offset = header.length;
-    pngs.forEach(({ size, png }, index) => {
-      const at = 6 + index * 16;
-      header[at] = header[at + 1] = size % 256;
-      header.writeUInt16LE(1, at + 4); header.writeUInt16LE(32, at + 6);
-      header.writeUInt32LE(png.length, at + 8); header.writeUInt32LE(offset, at + 12);
-      offset += png.length;
-    });
-    fs.writeFileSync(path.join(roots[0], 'icons/app.ico'), Buffer.concat([header, ...pngs.map((item) => item.png)]));
     await page.setContent('<style>body{margin:0}svg{width:20px;height:20px;color:#46617d}</style><i data-lucide="x"></i>');
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     await page.evaluate(() => lucide.createIcons());

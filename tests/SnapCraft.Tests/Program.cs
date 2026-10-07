@@ -4,6 +4,7 @@ using System.IO;
 using SnapCraft;
 
 Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException, threadScope: false);
 Application.EnableVisualStyles();
 var root = Path.Combine(AppContext.BaseDirectory, "test-output");
 Directory.CreateDirectory(root);
@@ -16,6 +17,12 @@ if (args.Contains("--profile-only"))
 }
 Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
 WebAssets.Prepare();
+if (args.Contains("--desktop-only")) { await DesktopTestSuite.RunAsync(args, root); return; }
+if (args.Contains("--window-occluded")) { await OccludedWindowTest.RunAsync(); return; }
+if (args.Contains("--window-fast-only")) { await WindowCaptureSmokeTest.RunAsync(root); return; }
+if (args.Contains("--desktop-capture-only")) { await DesktopCaptureTest.RunAsync(); return; }
+if (args.Contains("--cloaked-selection-only")) { await CloakedSelectionTest.RunAsync(); return; }
+if (args.Contains("--editor-batch")) { await EditorBatchCloseTest.RunAsync(); return; }
 ProductProfileTest.Run();
 LocalizationTest.Run();
 StartupTest.RunAssets(root);
@@ -54,6 +61,7 @@ if (!GlobalHotkey.IsValid(6, 83) || GlobalHotkey.IsValid(4, 83) || GlobalHotkey.
     throw new Exception("Hotkey validation failed");
 Console.WriteLine("hotkey validation: pass");
 HotkeyTest.Run();
+HotkeyPersistenceTest.Run();
 Console.WriteLine("native hotkey registration / collision / cleanup: pass");
 TestFrameValidator();
 Console.WriteLine("frame validator: pass");
@@ -93,10 +101,10 @@ if (args.Contains("--projects"))
     await ProjectWorkspaceTest.RunAsync(root);
     Console.WriteLine("native multi-image tabs / source independence / project round-trip / atomic save / close safety: pass");
 }
-if (args.Contains("--launcher") || args.Contains("--input-latency") || args.Contains("--tray-startup"))
+if (args.Contains("--launcher") || args.Contains("--input-latency") || args.Contains("--tray-startup") || args.Contains("--launcher-controls"))
 {
     Environment.SetEnvironmentVariable("SNAPCRAFT_DATA_DIR", Path.Combine(root, "app-data"));
-    await StartupTest.RunLauncherAsync(args.Contains("--input-latency"), args.Contains("--tray-startup"));
+    await StartupTest.RunLauncherAsync(args.Contains("--input-latency"), args.Contains("--tray-startup"), args.Contains("--launcher-controls"));
     Console.WriteLine("native launcher / close-to-tray / single click / minimize restore: pass");
 }
 if (args.Contains("--exit-editors"))

@@ -28,6 +28,8 @@ const layoutObserver = new MutationObserver(requestLayout);
 document.querySelectorAll('dialog').forEach(dialog => layoutObserver.observe(dialog, { attributes: true, attributeFilter: ['open'] }));
 layoutObserver.observe(videoMenu, { attributes: true, attributeFilter: ['hidden'] });
 const shortcutDialog = document.querySelector('#shortcutDialog');
+const shortcutSavedDialog = document.querySelector('#shortcutSavedDialog');
+document.querySelector('#closeShortcutSaved').onclick = () => shortcutSavedDialog.close();
 const hotkeyKey = document.querySelector('#hotkeyKey');
 const hotkeyMode = document.querySelector('#hotkeyMode');
 let bindings = [
@@ -90,7 +92,8 @@ document.querySelectorAll('[data-action]').forEach((button) => {
   });
 });
 document.querySelectorAll('[data-video]').forEach((button) => button.addEventListener('click', () => { videoMenu.hidden = true; pendingVideo = button.dataset.video; audioDialog.showModal(); }));
-delay.addEventListener('change', () => post('settings', { delayMs: Number(delay.value), openMode: open.value }));
+function showDelay() { delay.dataset.delayed = String(Number(delay.value) > 0); }
+delay.addEventListener('change', () => { showDelay(); post('settings', { delayMs: Number(delay.value), openMode: open.value }); });
 open.addEventListener('change', () => post('settings', { delayMs: Number(delay.value), openMode: open.value }));
 document.querySelector('#stop').addEventListener('click', () => post('stopVideo'));
 document.querySelector('#cancel').addEventListener('click', () => post('cancelVideo'));
@@ -98,6 +101,7 @@ host?.addEventListener('message', (event) => {
   const message = event.data;
   if (message.type === 'settings') {
     delay.value = String(message.delayMs); open.value = message.openMode;
+    showDelay();
     i18n.setProductName(message.productName);
     i18n.setLanguage(message.language);
     document.querySelector('#aboutDialog details summary').textContent = i18n.formatReleaseLabel(message.version, message.language);
@@ -106,8 +110,13 @@ host?.addEventListener('message', (event) => {
     document.querySelector('#developer').textContent = message.developer;
     document.querySelector('#installCpu').hidden = message.cpuAvailable !== false;
     if (message.shortcuts) bindings = message.shortcuts;
+    if (!shortcutDialog.open) loadShortcut();
+  }
+  if (message.type === 'hotkeySaved') {
+    document.querySelector('#shortcutSavedMode').textContent = [...hotkeyMode.options].find(option => option.value === message.mode)?.textContent || '';
+    shortcutDialog.close();
     loadShortcut();
-    if (shortcutDialog.open) shortcutDialog.close();
+    if (!shortcutSavedDialog.open) shortcutSavedDialog.showModal();
   }
   if (message.type === 'cpuAvailability') document.querySelector('#installCpu').hidden = message.value;
   if (message.type === 'about' && !aboutDialog.open) aboutDialog.showModal();
@@ -141,5 +150,6 @@ host?.addEventListener('message', (event) => {
   if (message.type === 'elapsed') document.querySelector('#elapsed').textContent = message.text;
 });
 post('ready');
+showDelay();
 lucide.createIcons();
 selectMode(null);

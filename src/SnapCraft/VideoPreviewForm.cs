@@ -20,8 +20,8 @@ internal sealed class VideoPreviewForm : Form
     public VideoPreviewForm(string path)
     {
         ClipPath = Path.GetFullPath(path);
-        Text = $"Neo Snap {AppInfo.Version} | พรีวิววิดีโอ";
-        Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "icons", "app.ico"));
+        Text = $"{AppInfo.ProductName} {AppInfo.Version} | {Localization.Translate("พรีวิววิดีโอ")}";
+        Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "icons", ProductProfile.Current.IconFile));
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(720, 480);
         MinimumSize = new Size(496, 399);
@@ -67,16 +67,16 @@ internal sealed class VideoPreviewForm : Form
                 }));
             };
             var clipUrl = $"https://clips.snapcraft.local/{Uri.EscapeDataString(Path.GetFileName(ClipPath))}";
-            web.Source = new Uri($"https://snapcraft.local/video-preview.html?clip={Uri.EscapeDataString(clipUrl)}");
+            web.Source = new Uri($"https://snapcraft.local/video-preview.html?clip={Uri.EscapeDataString(clipUrl)}&product={Uri.EscapeDataString(AppInfo.ProductName)}&language={Localization.CurrentLanguage}");
         }
         catch (Exception error)
         {
             if (IsDisposed) return;
             web.Hide();
             var fallback = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), FlowDirection = FlowDirection.TopDown, WrapContents = false };
-            fallback.Controls.Add(new Label { Text = $"เปิดพรีวิวไม่ได้: {error.Message}\nคลิปยังอยู่ที่: {ClipPath}", AutoSize = true, MaximumSize = new Size(650, 0) });
-            var copy = new Button { Text = "คัดลอกคลิป", AutoSize = true }; copy.Click += (_, _) => CopyClip();
-            var save = new Button { Text = "บันทึก MP4", AutoSize = true }; save.Click += async (_, _) => await SaveClipAsync();
+            fallback.Controls.Add(new Label { Text = Localization.Translate($"เปิดพรีวิวไม่ได้: {error.Message}\nคลิปยังอยู่ที่: {ClipPath}"), AutoSize = true, MaximumSize = new Size(650, 0) });
+            var copy = new Button { Text = Localization.Translate("คัดลอกคลิป"), AutoSize = true }; copy.Click += (_, _) => CopyClip();
+            var save = new Button { Text = Localization.Translate("บันทึก MP4"), AutoSize = true }; save.Click += async (_, _) => await SaveClipAsync();
             fallback.Controls.Add(copy); fallback.Controls.Add(save); Controls.Add(fallback); fallback.BringToFront();
         }
     }
@@ -121,7 +121,7 @@ internal sealed class VideoPreviewForm : Form
         busy = true;
         try
         {
-            using var dialog = new SaveFileDialog { Title = "Neo Snap | MP4", Filter = "MP4 video (*.mp4)|*.mp4", FileName = $"neo-snap-{DateTime.Now:yyyyMMdd-HHmmss}.mp4", AddExtension = true };
+            using var dialog = new SaveFileDialog { Title = $"{AppInfo.ProductName} | MP4", Filter = "MP4 video (*.mp4)|*.mp4", FileName = $"{(ProductProfile.Current.ApplicationFolder == "Snapzy" ? "snapzy" : "neo-snap")}-{DateTime.Now:yyyyMMdd-HHmmss}.mp4", AddExtension = true };
             if (dialog.ShowDialog(this) != DialogResult.OK) { Report("saveClip", false, "ยกเลิกการบันทึก"); return false; }
             await VideoClipStore.SaveAsync(ClipPath, dialog.FileName);
             kept = true; Report("saveClip", true, "บันทึก MP4 แล้ว"); return true;
@@ -132,9 +132,17 @@ internal sealed class VideoPreviewForm : Form
 
     private void Report(string action, bool success, string text)
     {
+        text = Localization.Translate(text);
         if (web.CoreWebView2 is not null && !web.IsDisposed)
             web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "result", action, success, text }));
-        else if (!success) MessageBox.Show(this, text, "Neo Snap", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        else if (!success) MessageBox.Show(this, text, AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
+    public void RefreshLanguage()
+    {
+        Text = $"{AppInfo.ProductName} {AppInfo.Version} | {Localization.Translate("พรีวิววิดีโอ")}";
+        if (web.CoreWebView2 is not null && !web.IsDisposed)
+            web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "language", language = Localization.CurrentLanguage }));
     }
 
     public async Task<bool> RequestCloseAsync()

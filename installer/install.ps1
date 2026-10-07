@@ -1,9 +1,11 @@
-param([string]$ProductFlavor = 'NeoSnap')
+﻿param([string]$ProductFlavor = 'NeoSnap')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 . (Join-Path $PSScriptRoot 'product-profile.ps1')
 . (Join-Path $PSScriptRoot 'setup-options.ps1')
 . (Join-Path $PSScriptRoot 'upgrade-policy.ps1')
+. (Join-Path $PSScriptRoot 'runtime-setup.ps1')
+. (Join-Path $PSScriptRoot 'payload-install.ps1')
 $product = Get-ProductProfile $ProductFlavor
 $productName = $product.Name
 $version = $product.Version
@@ -39,7 +41,7 @@ try {
     $initialLanguage = $product.Language
     try {
         $savedLanguage = (Get-Content -LiteralPath $settingsFile -Raw | ConvertFrom-Json).Language
-        if ($savedLanguage -in @('en','th')) { $initialLanguage = $savedLanguage }
+        if ($ProductFlavor -ne 'Snapzy' -and $savedLanguage -in @('en','th')) { $initialLanguage = $savedLanguage }
     } catch { }
     $options = New-SetupOptionsForm $product $initialLanguage
     if ($action -ne 'Install') {
@@ -58,8 +60,19 @@ try {
     if (@(Get-Process SnapCraft -ErrorAction SilentlyContinue | Where-Object { try { [IO.Path]::GetFullPath($_.Path) -eq [IO.Path]::GetFullPath($app) } catch { $false } }).Count) { throw "$productName was reopened. Please close it and run setup again. No files were changed." }
     $archive = Join-Path $PSScriptRoot 'payload.zip'
     if (-not (Test-Path -LiteralPath $archive)) { throw 'The installer payload is missing.' }
-    New-Item -ItemType Directory -Force -Path $target | Out-Null
-    Expand-Archive -LiteralPath $archive -DestinationPath $target -Force
+    $legacy=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'legacy-runtime-files.json') -Raw | ConvertFrom-Json
+    $runtimeStatus=Invoke-ApplicationPayload $archive $target $legacy {
+        param($requirementsPath) Install-RequiredDesktopRuntime $requirementsPath $productName $language
+    } {
+        if (@(Get-Process SnapCraft -ErrorAction SilentlyContinue | Where-Object { try { [IO.Path]::GetFullPath($_.Path) -eq [IO.Path]::GetFullPath($app) } catch { $false } }).Count) {
+            throw "$productName was reopened. Please close it and run setup again. No files were changed."
+        }
+    }
+    if ($runtimeStatus -eq 'Canceled') { exit 0 }
+    if ($runtimeStatus -eq 'RestartRequired') {
+        Show-Notice (Get-RuntimeText $language 'The Microsoft runtime installer requires a Windows restart. Restart when convenient, then rerun setup. No application files were changed.' 'ตัวติดตั้ง Microsoft Runtime ต้องการให้เริ่ม Windows ใหม่ กรุณาเริ่มใหม่เมื่อสะดวก แล้วเรียกตัวติดตั้งอีกครั้ง ยังไม่ได้เปลี่ยนไฟล์โปรแกรม')
+        exit 0
+    }
     foreach ($obsolete in @('ScreenRecorderLib.pdb','SnapCraft.pdb','Microsoft.Web.WebView2.Core.xml','Microsoft.Web.WebView2.WinForms.xml','Microsoft.Web.WebView2.Wpf.xml','Assets\stitch.js')) {
         $file = Join-Path $target $obsolete
         if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
@@ -69,7 +82,10 @@ try {
     New-Item -ItemType Directory -Force -Path (Split-Path $settingsFile) | Out-Null
     $settings = @{}
     if (Test-Path -LiteralPath $settingsFile) {
-        try { $settings = Get-Content -LiteralPath $settingsFile -Raw | ConvertFrom-Json -AsHashtable } catch { $settings = @{} }
+        try {
+            $savedSettings = Get-Content -LiteralPath $settingsFile -Raw | ConvertFrom-Json
+            foreach ($property in $savedSettings.PSObject.Properties) { $settings[$property.Name] = $property.Value }
+        } catch { $settings = @{} }
     }
     $settings['Language'] = $language
     $settings | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $settingsFile -Encoding UTF8
@@ -103,7 +119,7 @@ public static class NeoSnapShell {
     [NeoSnapShell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
     foreach ($directory in @((Split-Path $startLink), (Split-Path $desktopLink))) {
         $oldLink = Join-Path $directory ("{0}.lnk" -f $product.InstallFolder)
-        if ((Test-Path -LiteralPath $oldLink) -and $shell.CreateShortcut($oldLink).TargetPath -eq $app) { Remove-Item -LiteralPath $oldLink -Force }
+        if ($oldLink -ne $startLink -and $oldLink -ne $desktopLink -and (Test-Path -LiteralPath $oldLink) -and $shell.CreateShortcut($oldLink).TargetPath -eq $app) { Remove-Item -LiteralPath $oldLink -Force }
     }
 
     $uninstall = Join-Path $target 'uninstall.ps1'
@@ -118,11 +134,6 @@ public static class NeoSnapShell {
     New-ItemProperty -Path $reg -Name NoRepair -Value 1 -PropertyType DWord -Force | Out-Null
 
     $missing = @()
-    $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
-    $runtimes = if (Test-Path -LiteralPath $dotnet) { & $dotnet --list-runtimes } else { @() }
-    if (-not ($runtimes | Where-Object { $_ -match '^Microsoft\.WindowsDesktop\.App 8\.' })) {
-        $missing += '.NET 8 Desktop Runtime: https://dotnet.microsoft.com/download/dotnet/8.0'
-    }
     $webViewId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
     $webViewKeys = @(
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$webViewId",

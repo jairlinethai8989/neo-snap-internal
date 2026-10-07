@@ -566,7 +566,7 @@ document.querySelector('#deleteButton').onclick = removeSelected;
 document.querySelector('#undoButton').onclick = () => history(true);
 document.querySelector('#redoButton').onclick = () => history(false);
 document.querySelector('#clearButton').onclick = () => { if (objects.length) { endGesture(); checkpoint(); objects = objects.filter(o=>o.tool==='image'); selected = -1; syncControls(false); render(); } };
-document.addEventListener('keydown', (event) => { if (event.target.closest('input, textarea')) return; if (event.key === 'Delete' || event.key === 'Backspace') removeSelected(); if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') history(!event.shiftKey); if (event.key === 'Escape') { selected = -1; setTool('select'); } });
+document.addEventListener('keydown', (event) => { if (document.querySelector('dialog[open]') || event.target.closest('input, textarea')) return; if (event.key === 'Delete' || event.key === 'Backspace') removeSelected(); if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') history(!event.shiftKey); if (event.key === 'Escape') { selected = -1; setTool('select'); } });
 
 async function exportBlob() { render(false); try { return await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('สร้าง PNG ไม่สำเร็จ')), 'image/png')); } finally { render(); } }
 function imageSnapshot() { return JSON.stringify(projectState()); }

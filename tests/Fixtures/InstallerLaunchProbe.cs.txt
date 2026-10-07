@@ -1,0 +1,24 @@
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
+
+class InstallerLaunchProbe
+{
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
+    [STAThread] static void Main()
+    {
+        Application.EnableVisualStyles();
+        using (var form = new Form { Text = "Snapzy installer test", Width = 300, Height = 120 })
+        using (var timer = new Timer { Interval = 500 })
+        {
+            timer.Tick += delegate {
+                timer.Stop();
+                File.WriteAllText(Environment.GetEnvironmentVariable("SNAPZY_LAUNCH_PROBE"), IsWindowVisible(form.Handle) ? "VISIBLE" : "HIDDEN");
+                form.Close();
+            };
+            form.Shown += delegate { timer.Start(); };
+            Application.Run(form);
+        }
+    }
+}

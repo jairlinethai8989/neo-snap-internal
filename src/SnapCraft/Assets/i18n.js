@@ -1,6 +1,7 @@
 (() => {
   const thToEn = {
     'พร้อมใช้งาน':'Ready','เลือกภาพเพื่อแก้ไข':'Browse images','ตั้งค่าคีย์ลัด':'Keyboard shortcuts','เกี่ยวกับ Neo Snap':'About Neo Snap','จับภาพ':'Capture',
+    'บันทึกคีย์ลัดสำเร็จ':'Shortcut saved successfully','ตกลง':'OK','วิธีใช้เครื่องมือ':'Editor help','เปลี่ยนเป็นภาษาไทย':'Switch to Thai','เปลี่ยนเป็นภาษาอังกฤษ':'Switch to English',
     'เลือกพื้นที่หน้าจอ':'Select screen area','พื้นที่':'Area','เลือกหน้าต่าง':'Select window','หน้าต่าง':'Window','จับภาพยาวในบริเวณที่เลื่อน':'Capture scrolling content','ภาพยาว':'Scrolling',
     'บันทึกวิดีโอ MP4':'Record MP4','วิดีโอ':'Video','ทั้งหน้าจอ':'Full screen','หน่วง':'Delay','ทันที':'None','3 วินาที':'3 sec','5 วินาที':'5 sec','10 วินาที':'10 sec',
     'เปิดภาพ':'Open image','หน้าต่างใหม่':'New window','แท็บใหม่':'New tab','หยุดและบันทึก MP4':'Stop and save MP4','หยุด':'Stop','ยกเลิกวิดีโอ':'Cancel recording','ยกเลิก':'Cancel',
@@ -23,7 +24,8 @@
     'อ่านภาพไม่ได้':'Unable to read image','พิมพ์ข้อความ…':'Type text…','ลากกรอบครอบตัดบนภาพก่อน':'Drag a crop rectangle over the image first','สร้าง PNG ไม่สำเร็จ':'Could not create PNG','ภาพยังไม่พร้อมบันทึก':'Image is not ready to save',
     'กำลังคัดลอก…':'Copying…','กำลังบันทึก…':'Saving…','คัดลอกแล้ว':'Copied','คัดลอกภาพแล้ว':'Image copied','คัดลอกไม่สำเร็จ':'Copy failed','คัดลอกไม่ได้ กรุณาบันทึก PNG':'Could not copy. Please save as PNG.',
     'ไม่พบภาพที่จับไว้':'No captured image found','อ่านไฟล์งานไม่ได้':'Could not read project','กรุณาเปิดพรีวิวจาก Neo Snap':'Open the preview from Neo Snap','เล่นคลิปไม่ได้ แต่ยังคัดลอกหรือบันทึกไฟล์ได้':'Could not play the clip. You can still copy or save it.',
-    'ไม่พบคลิป':'Clip not found','พร้อมใช้งาน':'Ready','เลือกภาพ':'Choose image','ภาษา':'Language','English':'English','ไทย':'Thai'
+    'ไม่พบคลิป':'Clip not found','พร้อมใช้งาน':'Ready','เลือกภาพ':'Choose image','ภาษา':'Language','English':'English','ไทย':'Thai',
+    'ลากคลิปไปยังแอปอื่น':'Drag clip to another app','คัดลอกคลิป':'Copy clip','บันทึก MP4':'Save MP4','กำลังเตรียมคลิป…':'Preparing clip…'
   };
   const enToTh = Object.fromEntries(Object.entries(thToEn).map(([th, en]) => [en, th]));
   const normalizeLanguage = value => value === 'th' ? 'th' : 'en';
@@ -33,9 +35,9 @@
     const leading = value.match(/^\s*/)?.[0] || '';
     const trailing = value.match(/\s*$/)?.[0] || '';
     const phrase = value.slice(leading.length, value.length - trailing.length || undefined);
-    const canonical = phrase.replace(/Neo Snap|Snapzy/g, 'Neo Snap');
+    const canonical = phrase.replace(/Neo Snap|Snapzy/gi, 'Neo Snap');
     let translated = mode === 'en' ? (thToEn[canonical] || canonical) : (enToTh[canonical] || canonical);
-    translated = translated.replace(/Neo Snap|Snapzy/g, productName);
+    translated = translated.replace(/Neo Snap|Snapzy/gi, productName);
     return `${leading}${translated}${trailing}`;
   }
 
@@ -45,6 +47,10 @@
   let language = 'th';
   let productName = 'Neo Snap';
   let observer;
+
+  function updateProductIcon() {
+    for (const img of document.querySelectorAll('[data-product-icon]')) img.src = productName.toLowerCase() === 'snapzy' ? 'icons/snapzy.svg' : 'icons/icon.svg';
+  }
 
   function translateNode(node) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -76,11 +82,22 @@
     language = normalizeLanguage(value);
     document.documentElement.lang = language;
     for (const select of document.querySelectorAll('[data-language-select]')) select.value = language;
+    for (const button of document.querySelectorAll('[data-language-toggle]')) {
+      button.textContent = language.toUpperCase();
+      const label = language === 'en' ? 'Switch to Thai' : 'เปลี่ยนเป็นภาษาอังกฤษ';
+      button.title = label; button.setAttribute('aria-label', label);
+    }
     translateNode(document.body);
+    document.dispatchEvent(new CustomEvent('snapcraft:language', { detail: { language } }));
   }
 
   function init(options = {}) {
     productName = options.productName || productName;
+    updateProductIcon();
+    for (const button of document.querySelectorAll('[data-language-toggle]')) button.addEventListener('click', () => {
+      setLanguage(language === 'en' ? 'th' : 'en');
+      options.onLanguageChange?.(language);
+    });
     for (const select of document.querySelectorAll('[data-language-select]')) {
       select.value = normalizeLanguage(options.language || select.value || 'th');
       select.addEventListener('change', () => {
@@ -98,7 +115,7 @@
       }
     });
     observer.observe(document.body, {subtree:true, childList:true, characterData:true, attributes:true, attributeFilter:['title','aria-label','placeholder','alt']});
-    return {setLanguage, setProductName(name) { productName = name || productName; translateNode(document.body); }};
+    return {setLanguage, formatReleaseLabel, setProductName(name) { productName = name || productName; updateProductIcon(); translateNode(document.body); }};
   }
 
   const api = {normalizeLanguage, translateText, formatReleaseLabel, init};

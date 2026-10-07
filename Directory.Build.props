@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <BundledRuntimeVersion>10.0.12</BundledRuntimeVersion>
+    <!-- The SDK removes SelfContained during reference negotiation; retain a shared default. -->
+    <DefaultSelfContained Condition="'$(DefaultSelfContained)' == ''">true</DefaultSelfContained>
+    <SelfContained Condition="'$(SelfContained)' == ''">$(DefaultSelfContained)</SelfContained>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+</Project>

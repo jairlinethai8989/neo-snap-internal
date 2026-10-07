@@ -48,6 +48,19 @@ const root=path.resolve(__dirname,'../src/SnapCraft/Assets'),output=path.resolve
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Preview must not overflow horizontally');
       const actions=await page.locator('.clip-actions').boundingBox();assert(actions.y+actions.height<=viewport.height,'Actions stay accessible');
     }
+    for (const product of ['SnapZy', 'Neo Snap']) {
+      for (const language of ['en', 'th']) {
+        await page.goto(origin+'/video-preview.html?product='+encodeURIComponent(product)+'&language='+language+'&clip='+encodeURIComponent(origin+'/fixture.mp4'));
+        assert.equal(await page.locator('html').getAttribute('lang'), language, `${product} preview language`);
+        assert.equal((await page.locator('#copyClip').textContent()).trim(), language === 'en' ? 'Copy clip' : 'คัดลอกคลิป');
+        assert.equal((await page.locator('#saveClip').textContent()).trim(), language === 'en' ? 'Save MP4' : 'บันทึก MP4');
+        assert.equal(await page.title(), `${product} | ${language === 'en' ? 'Video' : 'วิดีโอ'}`);
+        await page.locator('#copyClip').click();
+        assert.equal(await page.locator('#clipStatus').textContent(), language === 'en' ? 'Copying…' : 'กำลังคัดลอก…');
+        await page.evaluate(next => receive({data:{type:'language', language:next}}), language === 'en' ? 'th' : 'en');
+        assert.equal(await page.locator('html').getAttribute('lang'), language === 'en' ? 'th' : 'en');
+      }
+    }
     console.log('PASS video preview: decoded playback, seek, copy success, save failure, compact layouts');
   }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(error=>{console.error(error);process.exitCode=1;});

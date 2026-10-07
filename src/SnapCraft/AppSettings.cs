@@ -37,7 +37,13 @@ internal sealed class AppSettings
     public void Save()
     {
         Directory.CreateDirectory(WebAssets.DataRoot);
-        File.WriteAllText(WebAssets.SettingsPath, JsonSerializer.Serialize(this));
+        var temporary = WebAssets.SettingsPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temporary, JsonSerializer.Serialize(this));
+            File.Move(temporary, WebAssets.SettingsPath, overwrite: true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 }
 

@@ -25,7 +25,7 @@ internal sealed partial class EditorHubForm : Form
         this.getEditors = getEditors;
         this.changeLanguage = changeLanguage;
         Text = $"{AppInfo.ProductName} {AppInfo.Version} | {Localization.Translate("แก้ไขภาพ")}";
-        Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "icons", "app.ico"));
+        Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "icons", ProductProfile.Current.IconFile));
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(780, 540);
         Size = new Size(1300, 850);
@@ -44,7 +44,7 @@ internal sealed partial class EditorHubForm : Form
         {
             if (closeApproved) return;
             e.Cancel = true;
-            await RequestCloseAsync();
+            await RequestUserCloseAsync();
         };
     }
 
@@ -206,15 +206,8 @@ internal sealed partial class EditorHubForm : Form
 
     private async Task<bool> CanClosePageAsync(TabPage page)
     {
-        if (saves.TryGetValue(page, out var pending)) await pending.Task;
         var web = page.Controls.OfType<WebView2>().Single();
-        if (projectOperations.TryGetValue(web, out var operation)) await operation.Task;
-        try
-        {
-            if (web.CoreWebView2 is not null &&
-                await web.ExecuteScriptAsync("window.neoSnapEditor ? neoSnapEditor.hasUnkeptChanges() : true") == "false") return true;
-        }
-        catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        if (!await HasUnkeptChangesAsync(page)) return true;
         tabs.SelectedTab = page;
         using var dialog = new EditorCloseDialog(page.Text);
         var decision = dialog.ShowDialog(this);
@@ -222,6 +215,20 @@ internal sealed partial class EditorHubForm : Form
         if (decision != DialogResult.Yes || !await SavePageAsync(page, true)) return false;
         // A newer edit must never be discarded by a late export completion.
         return await web.ExecuteScriptAsync("neoSnapEditor.hasUnkeptChanges()") == "false";
+    }
+
+    private async Task<bool> HasUnkeptChangesAsync(TabPage page)
+    {
+        if (saves.TryGetValue(page, out var pending)) await pending.Task;
+        var web = page.Controls.OfType<WebView2>().Single();
+        if (projectOperations.TryGetValue(web, out var operation)) await operation.Task;
+        try
+        {
+            if (web.CoreWebView2 is not null &&
+                await web.ExecuteScriptAsync("window.neoSnapEditor ? neoSnapEditor.hasUnkeptChanges() : true") == "false") return false;
+        }
+        catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        return true;
     }
 
     private async Task<bool> SavePageAsync(TabPage page, bool allowProject = false)
@@ -235,7 +242,7 @@ internal sealed partial class EditorHubForm : Form
             if (web.CoreWebView2 is null) throw new InvalidOperationException("ภาพยังไม่พร้อมบันทึก กรุณารอให้ภาพเปิดเสร็จ");
             if (projectOperations.TryGetValue(web, out var operation)) await operation.Task;
             var project = allowProject && (Path.GetExtension(page.Tag as string) == ".neosnap" || await web.ExecuteScriptAsync("objects.some(o => o.tool === 'image')") == "true");
-            using var dialog = new SaveFileDialog { Title = Localization.Translate(project ? "Neo Snap | บันทึกงาน" : "Neo Snap | PNG"), Filter = project ? $"{AppInfo.ProductName} project (*.neosnap)|*.neosnap|PNG image (*.png)|*.png" : "PNG image (*.png)|*.png", FileName = $"{(AppInfo.ProductName == "Snapzy" ? "snapzy" : "neo-snap")}-{DateTime.Now:yyyyMMdd-HHmmss}.{(project ? "neosnap" : "png")}", AddExtension = true };
+            using var dialog = new SaveFileDialog { Title = Localization.Translate(project ? "Neo Snap | บันทึกงาน" : "Neo Snap | PNG"), Filter = project ? $"{AppInfo.ProductName} project (*.neosnap)|*.neosnap|PNG image (*.png)|*.png" : "PNG image (*.png)|*.png", FileName = $"{(ProductProfile.Current.ApplicationFolder == "Snapzy" ? "snapzy" : "neo-snap")}-{DateTime.Now:yyyyMMdd-HHmmss}.{(project ? "neosnap" : "png")}", AddExtension = true };
             if (dialog.ShowDialog(this) != DialogResult.OK) { completion.SetResult(false); return false; }
             web.Enabled = false;
             if (project && dialog.FilterIndex == 1)

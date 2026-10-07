@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $helper = Join-Path $PSScriptRoot '..\installer\setup-options.ps1'
 if (-not (Test-Path $helper)) { throw 'Setup needs checked shortcut and launch options before completion.' }
 . (Join-Path $PSScriptRoot '..\installer\product-profile.ps1')
@@ -8,15 +8,15 @@ $form = New-SetupOptionsForm $snapzyProfile
 try {
     if (-not $form.Controls['shortcuts'].Checked -or -not $form.Controls['launch'].Checked -or -not $form.Controls['startup'].Checked) { throw 'Setup defaults must be checked.' }
     if ($form.Controls['language'].SelectedIndex -ne 0) { throw 'Snapzy setup must default to English.' }
-    if ($form.Text -ne 'Snapzy Setup' -or $form.Controls['product-label'].Text -ne 'Install Snapzy for this Windows account') { throw 'Snapzy setup must start in English.' }
+    if ($form.Text -cne 'SnapZy Setup' -or $form.Controls['product-label'].Text -cne 'Install SnapZy for this Windows account') { throw 'SnapZy setup must start in English with the new display name.' }
     $form.Controls['shortcuts'].Checked = $false
     $form.Controls['launch'].Checked = $false
     $form.Controls['language'].SelectedIndex = 1
     if ($form.Controls['shortcuts'].Checked -or $form.Controls['launch'].Checked) { throw 'Options cannot be disabled.' }
     if ($form.Controls['language'].SelectedIndex -ne 1) { throw 'Setup must allow switching to Thai.' }
-    if ($form.Text -ne 'ติดตั้ง Snapzy' -or $form.Controls['product-label'].Text -ne 'ติดตั้ง Snapzy สำหรับบัญชี Windows นี้') { throw 'Switching to Thai must localize setup labels.' }
+    if ($form.Text -cne 'ติดตั้ง SnapZy' -or $form.Controls['product-label'].Text -cne 'ติดตั้ง SnapZy สำหรับบัญชี Windows นี้') { throw 'Switching to Thai must localize setup labels.' }
     $form.Controls['language'].SelectedIndex = 0
-    if ($form.Text -ne 'Snapzy Setup') { throw 'Switching back must restore English setup labels.' }
+    if ($form.Text -cne 'SnapZy Setup') { throw 'Switching back must restore English setup labels.' }
 } finally { $form.Dispose() }
 $neoForm = New-SetupOptionsForm (Get-ProductProfile 'NeoSnap')
 try { if ($neoForm.Controls['language'].SelectedIndex -ne 1) { throw 'Neo Snap setup must preserve its Thai default.' } }
@@ -33,7 +33,7 @@ $events = [Collections.Generic.List[string]]::new()
 function Start-Process {
     param($FilePath, $WorkingDirectory, $WindowStyle)
     if (-not $parent.HasExited) { throw 'App launched while setup was still running.' }
-    if ($WindowStyle -ne 'Hidden') { throw 'Helper must not flash a console.' }
+    if ($WindowStyle -ne 'Normal') { throw 'The requested app window must be visible; only the helper console is hidden.' }
     $events.Add('launch')
 }
 try {

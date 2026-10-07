@@ -1,10 +1,10 @@
 <!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>แก้ไขภาพ • Neo Snap</title><link rel="stylesheet" href="app.css"></head>
 <body class="editor-page">
   <header class="topbar">
-    <a class="brand-link" href="#" id="homeLink"><img src="icons/icon.svg" alt=""><b>Neo Snap</b></a>
+    <a class="brand-link" href="#" id="homeLink"><img src="icons/icon.svg" data-product-icon alt=""><b>Neo Snap</b></a>
     <button class="editor-about" id="editorAbout" title="เกี่ยวกับ Neo Snap"><small id="appVersion">v0.1.20</small></button>
     <div class="file-info"><i></i><span><b>ภาพหน้าจอ</b><small id="imageInfo">กำลังเตรียมภาพ...</small></span></div>
-    <div class="top-actions"><select id="languageSelect" class="language-select" data-language-select aria-label="Language"><option value="en">English</option><option value="th">ไทย</option></select><button class="icon-button" id="combineButton" title="รวมภาพจากแท็บ"><i data-lucide="layers"></i></button><button class="icon-button" id="addImagesButton" title="เพิ่มภาพ"><i data-lucide="image-plus"></i></button><button class="icon-button" id="openProjectButton" title="เปิดงาน Neo Snap"><i data-lucide="folder-open"></i></button><button class="icon-button" id="saveProjectButton" title="บันทึกงานเพื่อแก้ไขต่อ"><i data-lucide="save"></i></button><button class="icon-button" id="copyButton" title="คัดลอกภาพ"><i data-lucide="copy"></i></button><button class="save-button" id="downloadButton"><i data-lucide="download"></i>บันทึก PNG</button></div>
+    <div class="top-actions"><button id="languageToggle" class="language-toggle" data-language-toggle type="button" aria-label="ภาษา">TH</button><button class="icon-button" id="editorHelpButton" title="วิธีใช้เครื่องมือ" aria-label="วิธีใช้เครื่องมือ"><i data-lucide="circle-help"></i></button><button class="icon-button" id="combineButton" title="รวมภาพจากแท็บ"><i data-lucide="layers"></i></button><button class="icon-button" id="addImagesButton" title="เพิ่มภาพ"><i data-lucide="image-plus"></i></button><button class="icon-button" id="openProjectButton" title="เปิดงาน Neo Snap"><i data-lucide="folder-open"></i></button><button class="icon-button" id="saveProjectButton" title="บันทึกงานเพื่อแก้ไขต่อ"><i data-lucide="save"></i></button><button class="icon-button" id="copyButton" title="คัดลอกภาพ"><i data-lucide="copy"></i></button><button class="save-button" id="downloadButton"><i data-lucide="download"></i>บันทึก PNG</button></div>
   </header>
   <main class="editor-workspace">
     <nav class="tool-row" aria-label="เครื่องมือ">
@@ -90,5 +90,18 @@
     </div>
   </section>
   <dialog class="editor-about-dialog" id="editorAboutDialog"><h2>Neo Snap <small id="editorAboutVersion"></small></h2><p>ผู้พัฒนา: <b>jairlinethai</b></p><p>อัปเดต: <time datetime="2026-10-06">6 ตุลาคม 2026</time></p><details><summary>มีอะไรใหม่ใน 0.1.20</summary><ul><li>จัดชั้นวัตถุและภาพ ขึ้น–ลงทีละชั้น หรือบนสุด–ล่างสุด</li><li>ย้ายชั้นภาพพร้อมคำอธิบายที่ติดกับภาพ</li><li>รองรับ Undo/Redo และเก็บลำดับชั้นในไฟล์งาน</li></ul></details><button id="closeEditorAbout">ปิด</button></dialog>
-  <script src="vendor/lucide.js"></script><script src="i18n.js"></script><script src="editor-palette.js"></script><script src="editor-annotations.js"></script><script src="editor-effects-controls.js"></script><script src="editor-view.js"></script><script src="editor-project.js"></script><script src="editor-curves.js"></script><script src="editor.js"></script><script src="editor-layers.js"></script><script src="editor-project-controls.js"></script>
+  <dialog class="editor-help-dialog" id="editorHelpDialog" aria-labelledby="editorHelpTitle"><header><h2 id="editorHelpTitle">วิธีใช้เครื่องมือ</h2><button id="closeEditorHelp" class="icon-button" title="ปิด" aria-label="ปิด" autofocus><i data-lucide="x"></i></button></header><div id="editorHelpContent" class="editor-help-content"></div></dialog>
+  <template id="editorHelpIcons">
+    <i data-help-icon="homeLink" data-lucide="house"></i>
+    <i data-help-icon="editorAbout" data-lucide="info"></i>
+    <i data-help-icon="languageToggle" data-lucide="languages"></i>
+    <i data-help-icon="paletteButton" data-lucide="palette"></i>
+    <i data-help-icon="sizeInput" data-lucide="ruler"></i>
+    <i data-help-icon="solid" data-lucide="list-minus"></i>
+    <i data-help-icon="opacityInput" data-lucide="blend"></i>
+    <i data-help-icon="shadowEnabled" data-lucide="moon"></i>
+    <i data-help-icon="outlineEnabled" data-lucide="type-outline"></i>
+    <i data-help-icon="actual" data-lucide="scan"></i>
+  </template>
+  <script src="vendor/lucide.js"></script><script src="i18n.js"></script><script src="editor-palette.js"></script><script src="editor-annotations.js"></script><script src="editor-effects-controls.js"></script><script src="editor-view.js"></script><script src="editor-project.js"></script><script src="editor-curves.js"></script><script src="editor.js"></script><script src="editor-layers.js"></script><script src="editor-project-controls.js"></script><script src="editor-help.js"></script>
 </body></html>

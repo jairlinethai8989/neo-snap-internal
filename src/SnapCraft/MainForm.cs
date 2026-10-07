@@ -54,7 +54,7 @@ internal sealed class MainForm : Form
         suppressInitialShow = startInTray;
         assetsPrepared = Task.Run(() => { using var timing = PerformanceTrace.Measure("startup.assets"); WebAssets.Prepare(); });
         Text = $"{AppInfo.ProductName} {AppInfo.Version}";
-        Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "icons", "app.ico"));
+        Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "icons", ProductProfile.Current.IconFile));
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -170,10 +170,9 @@ internal sealed class MainForm : Form
                     var mode = root.TryGetProperty("mode", out var modeValue) ? modeValue.GetString()! : "launcher";
                     var enabled = !root.TryGetProperty("enabled", out var enabledValue) || enabledValue.ValueKind == JsonValueKind.True;
                     var binding = new ShortcutBinding(modifiers, key, enabled);
-                    shortcuts!.Update(mode, binding);
-                    settings.GetShortcuts()[mode] = binding;
-                    settings.Save();
+                    shortcuts!.UpdateAndSave(settings, mode, binding);
                     SendSettings();
+                    Send(new { type = "hotkeySaved", mode });
                     SetStatus("บันทึกคีย์ลัดแล้ว");
                     break;
                 case "installCpu": await InstallCpuAsync(); break;
@@ -293,6 +292,7 @@ internal sealed class MainForm : Form
         settings.Save();
         RefreshNativeLanguage();
         foreach (var editor in editors) editor.RefreshLanguage();
+        foreach (var preview in videoPreviews) preview.RefreshLanguage();
         SendSettings();
     }
 

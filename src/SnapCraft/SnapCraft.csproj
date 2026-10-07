@@ -5,7 +5,7 @@
     <Product>Neo Snap</Product>
     <ProductFlavor Condition="'$(ProductFlavor)' == ''">NeoSnap</ProductFlavor>
     <Authors>jairlinethai</Authors>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
@@ -18,7 +18,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(ProductFlavor)' == 'Snapzy'">
     <Version>1.0.0</Version>
-    <Product>Snapzy</Product>
+    <Product>SnapZy</Product>
+    <ApplicationIcon>Assets\icons\snapzy.ico</ApplicationIcon>
     <DefineConstants>$(DefineConstants);SNAPZY_BUILD</DefineConstants>
   </PropertyGroup>
   <Target Name="ValidateProductFlavor" BeforeTargets="PrepareForBuild" Condition="'$(ProductFlavor)' != 'NeoSnap' and '$(ProductFlavor)' != 'Snapzy'">

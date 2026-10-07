@@ -3,7 +3,7 @@ $file = Join-Path $PSScriptRoot '..\installer\install.ps1'
 $tokens = $null
 $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile([IO.Path]::GetFullPath($file), [ref]$tokens, [ref]$errors)
-if ($errors.Count) { throw 'Installer has syntax errors.' }
+if ($errors.Count) { throw ("Installer has syntax errors: " + (($errors | ForEach-Object { $_.Message+' at '+$_.Extent.Text }) -join "`n")) }
 $completion = $ast.Find({ param($node)
     $node -is [Management.Automation.Language.IfStatementAst] -and
     $node.Clauses[0].Item1.Extent.Text -eq '$missing.Count'

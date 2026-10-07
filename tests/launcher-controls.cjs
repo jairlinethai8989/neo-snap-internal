@@ -44,7 +44,10 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
     assert.equal(await page.locator('#shortcutDialog').isVisible(), true);
     assert.match(await page.locator('#hotkeyStatus').textContent(), /คีย์ลัด/);
     await page.evaluate(() => receive({ data: { type: 'settings', delayMs: 0, openMode: 'window', version: '0.1.10', developer: 'jairlinethai', hotkeyModifiers: 7, hotkeyKey: 78 } }));
-    assert.equal(await page.locator('#shortcutDialog').isVisible(), false);
+    assert.equal(await page.locator('#shortcutDialog').isVisible(), true);
+    await page.evaluate(() => receive({ data: { type: 'hotkeySaved', mode: 'launcher' } }));
+    assert.equal(await page.locator('#shortcutSavedDialog').isVisible(), true);
+    await page.locator('#closeShortcutSaved').click();
     for (const mode of ['area', 'window', 'scroll', 'video']) {
       await page.locator('#shortcutButton').click();
       await page.locator('#hotkeyMode').selectOption(mode);

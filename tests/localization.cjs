@@ -8,6 +8,8 @@ assert.equal(translateText('จับภาพยาว', 'en', 'Snapzy'), 'Scro
 assert.equal(translateText('Scrolling capture', 'th', 'Neo Snap'), 'จับภาพยาว');
 assert.equal(translateText('เกี่ยวกับ Neo Snap', 'en', 'Snapzy'), 'About Snapzy');
 assert.equal(translateText('About Snapzy', 'th', 'Neo Snap'), 'เกี่ยวกับ Neo Snap');
+assert.equal(translateText('About SnapZy', 'th', 'SnapZy'), 'เกี่ยวกับ SnapZy');
+assert.equal(translateText('เกี่ยวกับ SnapZy', 'en', 'SnapZy'), 'About SnapZy');
 assert.equal(require('../src/SnapCraft/Assets/i18n.js').formatReleaseLabel('1.0.0', 'en'), "What's new in 1.0.0");
 assert.equal(require('../src/SnapCraft/Assets/i18n.js').formatReleaseLabel('0.1.20', 'th'), 'มีอะไรใหม่ใน 0.1.20');
 assert.equal(translateText('  100%  ', 'en', 'Snapzy'), '  100%  ');

@@ -10,12 +10,14 @@ internal static class WindowCaptureSmokeTest
 {
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr handle, IntPtr after, int x, int y, int cx, int cy, uint flags);
     public static Task RunAsync(string root)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
-            using var form = new Form { Text = "Neo Snap exact-pixel test", StartPosition = FormStartPosition.Manual, Location = new Point(80, 120), ClientSize = new Size(740, 430), TopMost = true };
+            var screen = Screen.AllScreens.Last().WorkingArea;
+            using var form = new Form { Text = "Neo Snap exact-pixel test", StartPosition = FormStartPosition.Manual, Location = new Point(screen.Left + 80, screen.Top + 120), ClientSize = new Size(740, 430), TopMost = true };
             var panel = new Panel { Dock = DockStyle.Fill };
             var black = false;
             form.Controls.Add(panel);
@@ -51,7 +53,6 @@ internal static class WindowCaptureSmokeTest
                                 var y = origin.Y - bounds.Top + point.Y;
                                 if (image.GetPixel(x, y).ToArgb() != color.ToArgb())
                                 {
-                                    image.Save(Path.Combine(root, "window-capture-failure.png"));
                                     throw new Exception($"Window capture pixel mismatch at {x},{y}: actual={image.GetPixel(x,y)}, expected={color}; image={image.Size}, window={bounds}, panel={origin}");
                                 }
                             }
@@ -61,6 +62,14 @@ internal static class WindowCaptureSmokeTest
                         File.Delete(path);
                     }
                     var region = panel.RectangleToScreen(panel.ClientRectangle);
+                    var positioned = SetWindowPos(form.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x53);
+                    form.Activate();
+                    panel.Refresh();
+                    await Task.Delay(100);
+                    var fixturePoint = panel.PointToScreen(new Point(panel.Width - 50, 50));
+                    var actualWindow = NativeInput.RootWindowAt(fixturePoint);
+                    if (actualWindow != form.Handle)
+                        throw new Exception($"Generated region fixture is obscured: target={form.Handle}, actual={actualWindow}, visible={NativeInput.IsCaptureTargetVisible(form.Handle)}, positioned={positioned}, point={fixturePoint}, bounds={NativeInput.WindowBounds(form.Handle)}");
                     using var area = await backend.CaptureRegionAsync(region);
                     if (area.Size != region.Size || area.GetPixel(area.Width - 50, 50).ToArgb() != Color.Coral.ToArgb()) throw new Exception("Visible region capture changed scale");
                     area.Save(Path.Combine(root, "exact-window-client.png"));

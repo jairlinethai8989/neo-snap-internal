@@ -25,6 +25,7 @@ internal static class NativeInput
     [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr handle, out RectNative rectangle);
     [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr handle, ref PointNative point);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out RectNative value, int size);
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static extern int DwmGetWindowState(IntPtr handle, int attribute, out uint value, int size);
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr handle);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
@@ -32,13 +33,55 @@ internal static class NativeInput
     private delegate bool EnumWindowProc(IntPtr handle, IntPtr data);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowProc callback, IntPtr data);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr handle);
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr handle);
+    [DllImport("user32.dll")] private static extern IntPtr GetShellWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetDesktopWindow();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr handle, System.Text.StringBuilder name, int size);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
+
+    public static bool IsDesktopWindow(IntPtr handle)
+    {
+        if (handle == IntPtr.Zero) return false;
+        if (handle == GetDesktopWindow()) return true;
+        var shell = GetShellWindow();
+        if (shell == IntPtr.Zero) return false;
+        if (handle == shell) return true;
+        var name = new System.Text.StringBuilder(256);
+        if (GetClassName(handle, name, name.Capacity) == 0 || name.ToString() != "WorkerW") return false;
+        GetWindowThreadProcessId(shell, out var shellProcess);
+        GetWindowThreadProcessId(handle, out var process);
+        return shellProcess != 0 && process == shellProcess;
+    }
+
+    public static bool IsCaptureTargetVisible(IntPtr handle)
+    {
+        if (!IsWindowVisible(handle) || IsIconic(handle)) return false;
+        // WS_VISIBLE remains set on windows hidden by DWM or another virtual desktop.
+        return DwmGetWindowState(handle, 14, out var cloaked, sizeof(uint)) != 0 || cloaked == 0;
+    }
+
+    public static bool IsWindowUnobstructed(IntPtr handle, Rectangle bounds)
+    {
+        if (!IsCaptureTargetVisible(handle)) return false;
+        var found = false;
+        var covered = false;
+        EnumWindows((window, _) =>
+        {
+            if (window == handle) { found = true; return false; }
+            if (IsCaptureTargetVisible(window) && GetWindowRect(window, out var rectangle) &&
+                bounds.IntersectsWith(Rectangle.FromLTRB(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom)))
+            { covered = true; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return found && !covered;
+    }
 
     public static IntPtr WindowBelow(Point point, IntPtr excluded)
     {
         var found = IntPtr.Zero;
         EnumWindows((handle, _) =>
         {
-            if (handle == excluded || !IsWindowVisible(handle) || !GetWindowRect(handle, out var rect)) return true;
+            if (handle == excluded || !IsCaptureTargetVisible(handle) || !GetWindowRect(handle, out var rect)) return true;
             if (point.X < rect.Left || point.X >= rect.Right || point.Y < rect.Top || point.Y >= rect.Bottom) return true;
             found = handle;
             return false;

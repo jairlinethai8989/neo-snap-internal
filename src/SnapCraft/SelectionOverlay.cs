@@ -82,6 +82,8 @@ internal sealed class SelectionOverlay : Form
 
     private ScrollTarget? RefineTarget(ScrollTarget? target, Point point)
     {
+        if (mode == SelectionMode.Window && target is not null)
+            return new ScrollTarget(NativeInput.IsDesktopWindow(target.WindowHandle) ? Screen.FromPoint(point).Bounds : NativeInput.VisibleWindowBounds(target.WindowHandle), target.WindowHandle);
         if (mode != SelectionMode.Scroll || target is null || desktop is null) return target;
         if (target != cachedWindow)
         {
@@ -125,10 +127,10 @@ internal sealed class SelectionOverlay : Form
         if (mode == SelectionMode.Window || mode == SelectionMode.Scroll && !ModifierKeys.HasFlag(Keys.Control))
         {
             var point = PointToScreen(e.Location);
-            var target = hoveredTarget?.Region.Contains(point) == true ? hoveredTarget : RefineTarget(ScrollTargetDetector.WindowAt(point, Handle), point);
+            var target = mode != SelectionMode.Window && hoveredTarget?.Region.Contains(point) == true ? hoveredTarget : RefineTarget(ScrollTargetDetector.WindowAt(point, Handle), point);
             Hide();
             var handle = target?.WindowHandle ?? NativeInput.RootWindowAt(point);
-            if (handle != IntPtr.Zero) Selection = new CaptureSelection(mode == SelectionMode.Scroll ? target?.Region ?? NativeInput.ClientBounds(handle) : NativeInput.VisibleWindowBounds(handle), handle);
+            if (handle != IntPtr.Zero) Selection = new CaptureSelection(mode == SelectionMode.Scroll ? target?.Region ?? NativeInput.ClientBounds(handle) : NativeInput.IsDesktopWindow(handle) ? Screen.FromPoint(point).Bounds : NativeInput.VisibleWindowBounds(handle), handle);
             DialogResult = Selection is null ? DialogResult.Cancel : DialogResult.OK;
             Close();
             return;
@@ -143,7 +145,7 @@ internal sealed class SelectionOverlay : Form
     {
         if (!dragging)
         {
-            if (mode is SelectionMode.Scroll or SelectionMode.Window && (hoveredTarget is null || !hoveredTarget.Region.Contains(PointToScreen(e.Location))))
+            if (mode == SelectionMode.Window || mode == SelectionMode.Scroll && (hoveredTarget is null || !hoveredTarget.Region.Contains(PointToScreen(e.Location))))
             {
                 hoveredTarget = RefineTarget(ScrollTargetDetector.WindowAt(PointToScreen(e.Location), Handle), PointToScreen(e.Location));
                 Invalidate();

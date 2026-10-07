@@ -9,9 +9,9 @@ internal static class LocalizationTest
             throw new Exception("Native dialogs must use the selected English language.");
         if (Localization.Translate("ภาพใหญ่เกินไป กรุณาแบ่งเป็นหลายภาพ") != "Image is too large. Please split it into multiple images.")
             throw new Exception("Native error text must remain readable when dynamic content is added.");
-        if (Localization.Translate("เกี่ยวกับ Neo Snap") != "About Snapzy" && ProductProfile.Current == ProductProfile.For(ProductFlavor.Snapzy))
+        if (Localization.Translate("เกี่ยวกับ Neo Snap") != "About SnapZy" && ProductProfile.Current == ProductProfile.For(ProductFlavor.Snapzy))
             throw new Exception("Native UI must use the selected product name in English.");
-        if (ProductProfile.Current == ProductProfile.For(ProductFlavor.Snapzy) && Localization.Translate("ออกจาก Neo Snap") != "Exit Snapzy")
+        if (ProductProfile.Current == ProductProfile.For(ProductFlavor.Snapzy) && Localization.Translate("ออกจาก Neo Snap") != "Exit SnapZy")
             throw new Exception("Native tray labels must use the selected language and product identity.");
         Localization.SetLanguage("th");
         if (Localization.Translate("เลือกภาพตามลำดับแท็บ") != "เลือกภาพตามลำดับแท็บ")

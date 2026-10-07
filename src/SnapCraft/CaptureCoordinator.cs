@@ -25,7 +25,7 @@ internal sealed class CaptureCoordinator
         return kind switch
         {
             CaptureKind.Area => await CaptureAreaAsync(selection.Region),
-            CaptureKind.Window => await backend.CaptureWindowAsync(selection.WindowHandle),
+            CaptureKind.Window => await backend.CaptureWindowAsync(selection.WindowHandle, desktopRegion: selection.Region),
             CaptureKind.Scroll => await CaptureScrollAsync(selection),
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };

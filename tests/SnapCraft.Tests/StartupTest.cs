@@ -46,7 +46,7 @@ internal static class StartupTest
         Console.WriteLine("startup asset cache / update / repair / blue ICO: pass");
     }
 
-    public static Task RunLauncherAsync(bool measureInput = false, bool startInTray = false)
+    public static Task RunLauncherAsync(bool measureInput = false, bool startInTray = false, bool verifyControls = false)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
@@ -84,6 +84,7 @@ internal static class StartupTest
                         if (attempt == 199) throw new Exception("Launcher did not become ready");
                     }
                     Console.WriteLine($"launcher cold UI ready: {clock.ElapsedMilliseconds} ms");
+                    if (verifyControls) await VerifyControlsAsync(web);
                     if (measureInput) await InputLatencyTest.RunAsync(form, web);
                     if (form.TopMost) throw new Exception("Launcher must not permanently cover installer or other windows");
                     if (form.ClientSize.Width > 400 || form.ClientSize.Height > 170) throw new Exception("Launcher did not restore its compact size");
@@ -112,6 +113,31 @@ internal static class StartupTest
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         return completion.Task.WaitAsync(TimeSpan.FromSeconds(25));
+    }
+
+    private static async Task VerifyControlsAsync(WebView2 web)
+    {
+        async Task WaitForAsync(string expression)
+        {
+            for (var attempt = 0; attempt < 100; attempt++)
+            {
+                if (await web.ExecuteScriptAsync(expression) == "true") return;
+                await Task.Delay(50);
+            }
+            throw new Exception($"Native launcher did not acknowledge: {expression}");
+        }
+        await web.ExecuteScriptAsync("if(document.documentElement.lang !== 'en') document.querySelector('#languageToggle').click()");
+        await WaitForAsync("document.documentElement.lang === 'en'");
+        await web.ExecuteScriptAsync("document.querySelector('#languageToggle').click()");
+        await WaitForAsync("document.documentElement.lang === 'th'");
+        for (var attempt = 0; attempt < 100 && AppSettings.Load().Language != "th"; attempt++) await Task.Delay(50);
+        if (AppSettings.Load().Language != "th") throw new Exception("Language toggle did not persist through the native host.");
+        await web.ExecuteScriptAsync("document.querySelector('#languageToggle').click(); document.querySelector('#shortcutButton').click(); document.querySelector('#hotkeyEnabled').checked=false; document.querySelector('#saveShortcut').click()");
+        await WaitForAsync("document.querySelector('#shortcutSavedDialog').open && !document.querySelector('#shortcutDialog').open");
+        if (AppSettings.Load().GetShortcuts()["launcher"].Enabled) throw new Exception("Shortcut confirmation appeared without saving the binding.");
+        await web.ExecuteScriptAsync("document.querySelector('#closeShortcutSaved').click()");
+        await WaitForAsync("!document.querySelector('#shortcutSavedDialog').open");
+        Console.WriteLine("native UI: compact language toggle persists, confirmed hotkey save popup: pass");
     }
 
     public static Task RunSingleInstanceAsync(string root)

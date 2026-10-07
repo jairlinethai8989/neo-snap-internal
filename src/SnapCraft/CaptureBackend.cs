@@ -6,18 +6,37 @@ internal sealed class CaptureBackend
 {
     private RecorderApi preferredDisplayApi = RecorderApi.WindowsGraphicsCapture;
 
-    public async Task<string> CaptureWindowAsync(IntPtr handle, CancellationToken cancellationToken = default)
+    public async Task<string> CaptureWindowAsync(IntPtr handle, CancellationToken cancellationToken = default, Rectangle? desktopRegion = null)
     {
         if (handle == IntPtr.Zero) throw new ArgumentException("ไม่ได้เลือกหน้าต่าง");
         cancellationToken.ThrowIfCancellationRequested();
-        NativeInput.FocusWindow(handle);
-        await Task.Delay(80, cancellationToken);
+        // Shell surfaces are not GPU application windows. Capture the selected monitor as displayed.
+        if (NativeInput.IsDesktopWindow(handle))
+        {
+            using var timing = PerformanceTrace.Measure("capture.desktop");
+            using var desktop = await CaptureRegionAsync(desktopRegion ?? Screen.FromHandle(handle).Bounds, cancellationToken);
+            var path = WebAssets.NewCapturePath();
+            try { await Task.Run(() => desktop.Save(path, System.Drawing.Imaging.ImageFormat.Png), cancellationToken); }
+            catch { File.Delete(path); throw; }
+            return path;
+        }
+        if (!NativeInput.IsCaptureTargetVisible(handle)) throw new InvalidOperationException("หน้าต่างเป้าหมายถูกย่อหรือไม่มีพื้นที่ที่มองเห็น");
         try
         {
             using var timing = PerformanceTrace.Measure("capture.window");
-            using var image = await CaptureRegionAsync(Rectangle.Intersect(NativeInput.VisibleWindowBounds(handle), SystemInformation.VirtualScreen), cancellationToken);
+            var bounds = NativeInput.VisibleWindowBounds(handle);
+            Bitmap? captured = null;
+            if (SystemInformation.VirtualScreen.Contains(bounds) && NativeInput.IsWindowUnobstructed(handle, bounds))
+            {
+                captured = await CaptureRegionAsync(bounds, cancellationToken);
+                if (!NativeInput.IsWindowUnobstructed(handle, bounds) || NativeInput.VisibleWindowBounds(handle) != bounds)
+                { captured.Dispose(); captured = null; }
+            }
+            captured ??= await WindowSurfaceCapture.TryRenderAsync(handle, bounds, cancellationToken);
+            using var image = captured ?? throw new InvalidOperationException("The target window cannot be copied safely from the desktop.");
             var path = WebAssets.NewCapturePath();
-            await Task.Run(() => image.Save(path, System.Drawing.Imaging.ImageFormat.Png), cancellationToken);
+            try { await Task.Run(() => image.Save(path, System.Drawing.Imaging.ImageFormat.Png), cancellationToken); }
+            catch { File.Delete(path); throw; }
             return path;
         }
         catch (Exception firstError) when (firstError is not OperationCanceledException)

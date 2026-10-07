@@ -8,10 +8,10 @@
 </head>
 <body>
   <header>
-    <img src="icons/icon.svg" alt="">
+    <img src="icons/icon.svg" data-product-icon alt="">
     <div class="identity"><strong>Neo Snap <small id="version">v0.1.20</small></strong><small>Windows Capture</small></div>
     <span id="state" class="state">พร้อมใช้งาน</span>
-    <select id="languageSelect" class="language-select" data-language-select aria-label="Language"><option value="en">English</option><option value="th">ไทย</option></select>
+    <button id="languageToggle" class="language-toggle" data-language-toggle type="button" aria-label="ภาษา">TH</button>
     <button id="openProject" class="about-button" title="เลือกภาพเพื่อแก้ไข" aria-label="เลือกภาพเพื่อแก้ไข"><i data-lucide="image-plus"></i></button>
     <button id="shortcutButton" class="about-button" title="ตั้งค่าคีย์ลัด" aria-label="ตั้งค่าคีย์ลัด"><i data-lucide="keyboard"></i></button>
     <button id="aboutButton" class="about-button" title="เกี่ยวกับ Neo Snap" aria-label="เกี่ยวกับ Neo Snap"><i data-lucide="info"></i></button>
@@ -58,6 +58,11 @@
     <label><input type="checkbox" id="hotkeyCtrl" checked>Ctrl <input type="checkbox" id="hotkeyAlt">Alt <input type="checkbox" id="hotkeyShift" checked>Shift <select id="hotkeyKey" aria-label="ปุ่มคีย์ลัด"></select></label>
     <p id="hotkeyStatus" role="status"></p>
     <div class="dialog-actions"><button id="closeShortcut">ยกเลิก</button><button id="saveShortcut" class="primary">บันทึก</button></div>
+  </dialog>
+  <dialog id="shortcutSavedDialog" class="launcher-dialog" aria-labelledby="shortcutSavedTitle">
+    <h2 id="shortcutSavedTitle">บันทึกคีย์ลัดสำเร็จ</h2>
+    <p id="shortcutSavedMode"></p>
+    <div class="dialog-actions"><button id="closeShortcutSaved" class="primary" autofocus>ตกลง</button></div>
   </dialog>
   <script src="vendor/lucide.js"></script>
   <script src="i18n.js"></script>

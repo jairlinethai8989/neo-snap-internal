@@ -7,10 +7,14 @@ internal static class ProductProfileTest
     {
         var neo = ProductProfile.For(ProductFlavor.NeoSnap);
         var snapzy = ProductProfile.For(ProductFlavor.Snapzy);
+        if (neo.IconFile != "app.ico" || snapzy.IconFile != "snapzy.ico")
+            throw new Exception("Snapzy must use its own approved icon without changing Neo Snap.");
+        using (var icon = new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "icons", ProductProfile.Current.IconFile)))
+            if (icon.Width < 16) throw new Exception("The product icon must be a valid Windows ICO.");
 
         if (neo.ProductName != "Neo Snap" || neo.ApplicationFolder != "SnapCraft" || neo.DataFolder != "SnapCraft" || neo.StartupRegistryValue != "NeoSnap" || neo.UninstallRegistryKey != "SnapCraft" || neo.DefaultLanguage != "th")
             throw new Exception("Neo Snap must preserve its existing Windows identity and Thai default.");
-        if (snapzy.ProductName != "Snapzy" || snapzy.ApplicationFolder != "Snapzy" || snapzy.DataFolder != "Snapzy" || snapzy.StartupRegistryValue != "Snapzy" || snapzy.UninstallRegistryKey != "Snapzy" || snapzy.DefaultLanguage != "en")
+        if (snapzy.ProductName != "SnapZy" || snapzy.ApplicationFolder != "Snapzy" || snapzy.DataFolder != "Snapzy" || snapzy.StartupRegistryValue != "Snapzy" || snapzy.UninstallRegistryKey != "Snapzy" || snapzy.DefaultLanguage != "en")
             throw new Exception("Snapzy must use isolated Windows identity and English default.");
         if (neo.InstanceId == snapzy.InstanceId || !Guid.TryParse(neo.InstanceId, out _) || !Guid.TryParse(snapzy.InstanceId, out _) ||
             string.IsNullOrWhiteSpace(neo.AppUserModelId) || string.IsNullOrWhiteSpace(snapzy.AppUserModelId) || neo.AppUserModelId == snapzy.AppUserModelId)

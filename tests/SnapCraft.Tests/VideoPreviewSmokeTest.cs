@@ -32,10 +32,19 @@ internal static class VideoPreviewSmokeTest
             catch (Exception error) { completion.SetException(new Exception("Cannot safely preserve clipboard before native copy test", error)); return; }
             preview.Shown += async (_, _) =>
             {
+                Exception? failure = null;
+                var restored = false;
                 try
                 {
                     var web = preview.Controls.OfType<WebView2>().Single();
                     await WaitAsync(async () => web.CoreWebView2 is not null && await web.ExecuteScriptAsync("document.querySelector('video')?.readyState >= 2") == "true");
+                    Localization.SetLanguage("en");
+                    ((VideoPreviewForm)preview).RefreshLanguage();
+                    await WaitAsync(async () => await web.ExecuteScriptAsync("document.documentElement.lang === 'en' && document.querySelector('#copyClip').textContent.trim() === 'Copy clip'") == "true");
+                    if (!preview.Text.EndsWith("Video preview")) throw new Exception("Native preview title was not localized.");
+                    Localization.SetLanguage("th");
+                    ((VideoPreviewForm)preview).RefreshLanguage();
+                    await WaitAsync(async () => await web.ExecuteScriptAsync("document.documentElement.lang === 'th'") == "true");
                     await web.ExecuteScriptAsync("document.querySelector('video').play()");
                     await WaitAsync(async () => await web.ExecuteScriptAsync("document.querySelector('video').currentTime > .3") == "true");
                     Console.WriteLine("preview fixture decoded; testing close cancel");
@@ -53,7 +62,7 @@ internal static class VideoPreviewSmokeTest
                     var saveDialog = IntPtr.Zero;
                     await WaitAsync(() =>
                     {
-                        saveDialog = FindWindow("#32770", "Neo Snap | MP4");
+                        saveDialog = FindWindow("#32770", $"{AppInfo.ProductName} | MP4");
                         if (saveDialog == IntPtr.Zero) return Task.FromResult(false);
                         GetWindowThreadProcessId(saveDialog, out var processId);
                         return Task.FromResult(processId == Environment.ProcessId);
@@ -65,6 +74,8 @@ internal static class VideoPreviewSmokeTest
                     await WaitAsync(() => Task.FromResult(Clipboard.ContainsFileDropList() && Clipboard.GetFileDropList().Contains(retained)));
                     if (await web.ExecuteScriptAsync("document.querySelector('#copyClip').getAttribute('aria-pressed')") != "\"true\"") await Task.Delay(200);
                     if (await web.ExecuteScriptAsync("document.querySelector('#copyClip').getAttribute('aria-pressed')") != "\"true\"") throw new Exception("Native copy success must be visible");
+                    await RestoreClipboardAsync(clipboard);
+                    restored = true;
                     if (!await (Task<bool>)close.Invoke(preview, null)!) throw new Exception("Copied video should close without discard prompt");
                     if (!File.Exists(retained)) throw new Exception("Closing copied video broke the file-drop clipboard");
                     var unkept = Path.Combine(root, "unkept.mp4"); File.Copy(retained!, unkept, true);
@@ -82,15 +93,29 @@ internal static class VideoPreviewSmokeTest
                     if (!await discardClose! || File.Exists(secondPath)) throw new Exception("Explicit discard must close the preview and remove its managed clip");
                     if (!File.Exists(retained)) throw new Exception("Discarding another video must not delete the clipboard clip");
                     Console.WriteLine("native video playback / close cancel / save cancel / file-drop copy / close lifetime / discard: pass");
-                    completion.TrySetResult();
                 }
-                catch (Exception error) { completion.TrySetException(error); }
-                finally { Clipboard.SetDataObject(clipboard, true); preview.Dispose(); Application.ExitThread(); }
+                catch (Exception error) { failure = error; }
+                finally
+                {
+                    try { if (!restored) await RestoreClipboardAsync(clipboard); }
+                    catch (Exception error) { failure = new AggregateException("Clipboard restoration failed; the test must not report success.", failure is null ? [error] : [failure, error]); }
+                    finally { preview.Dispose(); Application.ExitThread(); }
+                    if (failure is null) completion.TrySetResult(); else completion.TrySetException(failure);
+                }
             };
             preview.Show(); Application.Run();
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start();
         return completion.Task.WaitAsync(TimeSpan.FromSeconds(65));
+    }
+
+    private static async Task RestoreClipboardAsync(DataObject snapshot)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { Clipboard.SetDataObject(snapshot, true, 20, 100); return; }
+            catch (ExternalException) when (attempt < 3) { await Task.Delay(250); }
+        }
     }
 
     private static async Task WaitAsync(Func<Task<bool>> ready)
