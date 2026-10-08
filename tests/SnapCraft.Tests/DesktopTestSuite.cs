@@ -5,6 +5,11 @@ internal static class DesktopTestSuite
         var groups = new Dictionary<string, Func<Task>>
         {
             ["--fast-startup"] = FastStartupTest.RunAsync,
+            ["--editor-timing"] = EditorLatencyTest.RunTimingAsync,
+            ["--prepared-preview"] = EditorLatencyTest.RunPreviewAsync,
+            ["--large-preview"] = EditorLatencyTest.RunLargePreviewAsync,
+            ["--pending-editor"] = EditorLatencyTest.RunPendingAsync,
+            ["--pending-editor-fallback"] = EditorLatencyTest.RunPendingFallbackAsync,
             ["--productivity"] = () => ProductivityDesktopTest.RunAsync(root),
             ["--editor-ocr"] = EditorOcrButtonTest.RunAsync,
             ["--ocr-ui"] = () => OcrInterfaceTest.RunAsync(root),
