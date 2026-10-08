@@ -58,7 +58,7 @@ internal static class VideoCpuSmokeTest
                         var saved = await video.StopAsync(true);
                         if (saved == path || saved is null || new FileInfo(saved).Length < 10_000) throw new Exception("CPU MP4 was not finalized to an independent file");
                         VerifyMp4(saved, audio.System);
-                        if (File.Exists(path + ".video.mp4") || File.Exists(path + ".system.wav")) throw new Exception("Successful recording left intermediate files");
+                        if (File.Exists(path + ".video.mp4") || File.Exists(path + ".system.pcm")) throw new Exception("Successful recording left intermediate files");
                         Console.WriteLine($"CPU {(audio.System ? "system-audio" : "silent")} video with locked original output: {saved}");
                     }
                     var canceled = Path.Combine(root, "cpu-canceled.mp4");
@@ -82,7 +82,7 @@ internal static class VideoCpuSmokeTest
         return completion.Task.WaitAsync(TimeSpan.FromSeconds(70));
     }
 
-    private static void VerifyMp4(string path, bool audio)
+    internal static void VerifyMp4(string path, bool audio)
     {
         var executable = Path.Combine(Path.GetDirectoryName(FfmpegVideoSession.FindExecutable())!, "ffprobe.exe");
         var info = new System.Diagnostics.ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };

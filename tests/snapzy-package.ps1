@@ -1,4 +1,4 @@
-param([string]$Installer = (Join-Path $PSScriptRoot '..\dist\SnapZy-Setup-1.0.0.exe'))
+param([string]$Installer = (Join-Path $PSScriptRoot '..\dist\SnapZy-Setup-1.0.1.exe'))
 $ErrorActionPreference = 'Stop'
 $Installer = (Resolve-Path -LiteralPath $Installer).Path
 $directory = Join-Path $env:TEMP ('snapzy-package-' + [guid]::NewGuid().ToString('N'))
@@ -10,9 +10,9 @@ if ($bytes[0] -ne 0xef -or $bytes[1] -ne 0xbb -or $bytes[2] -ne 0xbf) { throw 'P
 . (Join-Path $directory 'product-profile.ps1')
 $profile = Get-ProductProfile 'Snapzy'
 if ($profile.Name -cne 'SnapZy' -or $profile.Language -ne 'en') { throw 'Packaged setup must use the SnapZy display name and English default.' }
-if ($profile.IconName -ne 'Snapzy-1.0.0-A.ico') { throw 'The installer still uses a cached old icon path.' }
-$payload = Join-Path $directory 'payload'
-Expand-Archive -LiteralPath (Join-Path $directory 'payload.zip') -DestinationPath $payload
+if ($profile.IconName -ne 'Snapzy-1.0.1-A.ico') { throw 'The installer still uses a cached old icon path.' }
+. (Join-Path $directory 'payload-install.ps1')
+$payload = Expand-ManagedPayload (Join-Path $directory 'payload.zip')
 $install = Get-Content -LiteralPath (Join-Path $directory 'install.ps1') -Raw
 if (-not $install.Contains('$oldLink -ne $startLink -and $oldLink -ne $desktopLink')) { throw 'Packaged installer can delete its newly created shortcuts.' }
 if ($install.Contains('ConvertFrom-Json -AsHashtable')) { throw 'Packaged installer loses settings on Windows PowerShell 5.1.' }
@@ -34,6 +34,6 @@ foreach ($asset in @('editor-help.js', 'icons\snapzy.svg')) {
     if (-not (Test-Path -LiteralPath (Join-Path $payload ('Assets\' + $asset)))) { throw "Package is missing $asset." }
 }
 $version = (Get-Item -LiteralPath (Join-Path $payload 'SnapCraft.exe')).VersionInfo
-if ($version.ProductName -cne 'SnapZy' -or [version]$version.FileVersion -ne [version]'1.0.0.0') { throw 'Incorrect product identity or version.' }
+if ($version.ProductName -cne 'SnapZy' -or [version]$version.FileVersion -ne [version]'1.0.1.0') { throw 'Incorrect product identity or version.' }
 Write-Output 'PASS extracted Snapzy package: UTF-8 BOM, shortcut retention, visible launch, settings preservation, icon A, Help and version'
 Write-Output "Extracted for inspection only: $directory"

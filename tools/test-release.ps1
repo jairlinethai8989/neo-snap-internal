@@ -18,7 +18,7 @@ try {
         & $test @arguments
         if ($LASTEXITCODE) { throw "$flavor native/core tests failed." }
         if ($Desktop) {
-            foreach ($group in @('--desktop-capture-only','--cloaked-selection-only','--window-fast-only','--window-occluded','--video-cpu','--video-preview','--recording-preview','--editor','--projects','--launcher-controls','--exit-editors','--scroll-esc','--editor-batch')) {
+            foreach ($group in @('--fast-startup','--productivity','--editor-ocr','--ocr-ui','--scroll-occluded','--desktop-capture-only','--cloaked-selection-only','--window-fast-only','--window-occluded','--video-cpu','--video-preview','--recording-preview','--editor','--projects','--launcher-controls','--exit-editors','--scroll-esc','--editor-batch')) {
                 & $test --desktop-only $group
                 if ($LASTEXITCODE) { throw "$flavor $group failed." }
             }

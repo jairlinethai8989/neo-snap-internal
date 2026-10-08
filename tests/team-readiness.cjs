@@ -59,9 +59,9 @@ const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
       await page.waitForFunction(() => sent.at(-1).action === 'layout' && sent.at(-1).expanded === false);
       await page.locator('#aboutButton').click();
       await page.locator('#aboutDialog summary').click();
-      assert.match(await page.locator('#aboutDialog').textContent(), /0\.1\.20/);
-      assert.match(await page.locator('#aboutDialog').textContent(), /จัดชั้นวัตถุและภาพ/);
-      await page.screenshot({ path: path.join(output, 'launcher-about-0.1.19.png') });
+      assert.match(await page.locator('#aboutDialog').textContent(), /0\.1\.21/);
+      assert.match(await page.locator('#aboutDialog').textContent(), /อ่านข้อความทั้งภาพหรือพื้นที่ที่เลือกด้วย OCR/);
+      await page.screenshot({ path: path.join(output, 'launcher-about-0.1.21.png') });
       await page.locator('#closeAbout').click();
       console.log('PASS compact launcher: layout, truthful activity, idle reset, dialog expansion');
       await page.close();

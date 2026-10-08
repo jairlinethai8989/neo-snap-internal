@@ -4,6 +4,11 @@ internal static class DesktopTestSuite
     {
         var groups = new Dictionary<string, Func<Task>>
         {
+            ["--fast-startup"] = FastStartupTest.RunAsync,
+            ["--productivity"] = () => ProductivityDesktopTest.RunAsync(root),
+            ["--editor-ocr"] = EditorOcrButtonTest.RunAsync,
+            ["--ocr-ui"] = () => OcrInterfaceTest.RunAsync(root),
+            ["--scroll-occluded"] = ScrollOcclusionTest.RunAsync,
             ["--desktop-capture-only"] = DesktopCaptureTest.RunAsync,
             ["--desktop-click-only"] = DesktopSelectionTest.RunAsync,
             ["--cloaked-selection-only"] = CloakedSelectionTest.RunAsync,

@@ -21,8 +21,8 @@ internal static class ProductProfileTest
             throw new Exception("Each product needs distinct valid application and taskbar identities.");
         if (AppInfo.ProductName != ProductProfile.Current.ProductName || AppInfo.InstanceId != ProductProfile.Current.InstanceId || AppInfo.AppUserModelId != ProductProfile.Current.AppUserModelId)
             throw new Exception("The executable identity must match the selected product profile.");
-        if (ProductProfile.Current == snapzy && AppInfo.Version != "1.0.0")
-            throw new Exception("The public product must start at version 1.0.0.");
+        if (ProductProfile.Current == snapzy && AppInfo.Version != "1.0.1")
+            throw new Exception("The public product must use version 1.0.1.");
         if (new AppSettings().Language != ProductProfile.Current.DefaultLanguage)
             throw new Exception("New settings must use the active product's default language.");
         if (System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{\"Language\":\"fr\"}")!.Language != ProductProfile.Current.DefaultLanguage)

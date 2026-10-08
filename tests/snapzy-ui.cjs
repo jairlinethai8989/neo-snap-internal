@@ -30,7 +30,7 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
     for (const product of ['SnapZy', 'Neo Snap']) {
       for (const language of ['en', 'th']) {
         for (const delayMs of [0, 3000, 5000, 10000]) {
-          await page.evaluate(data => receive({ data }), { type: 'settings', productName: product, language, version: '1.0.0', delayMs, openMode: 'window' });
+          await page.evaluate(data => receive({ data }), { type: 'settings', productName: product, language, version: '1.0.1', delayMs, openMode: 'window' });
           assert.equal(await page.locator('#delay').getAttribute('data-delayed'), String(delayMs > 0), 'Nonzero capture delay must be visibly active');
           assert.equal(await page.locator('#delay').inputValue(), String(delayMs));
         }
@@ -39,7 +39,7 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
     await page.locator('#delay').selectOption('0');
     assert.equal(await page.locator('#delay').getAttribute('data-delayed'), 'false');
     assert.equal((await page.evaluate(() => sent.at(-1))).delayMs, 0);
-    await page.evaluate(() => receive({ data: { type: 'settings', productName: 'SnapZy', language: 'en', version: '1.0.0', delayMs: 0, openMode: 'window' } }));
+    await page.evaluate(() => receive({ data: { type: 'settings', productName: 'SnapZy', language: 'en', version: '1.0.1', delayMs: 0, openMode: 'window' } }));
     const mode = process.argv[2];
     if (!mode || mode === 'language') {
       assert.equal(await page.locator('[data-language-toggle]').count(), 1, 'Use a compact language button, not a dropdown');
@@ -62,7 +62,7 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
       await page.evaluate(() => receive({ data: { type: 'status', text: 'Shortcut unavailable', error: true } }));
       assert.equal(await page.locator('#shortcutSavedDialog').isVisible(), false);
       assert.equal(await page.locator('#shortcutDialog').isVisible(), true);
-      await page.evaluate(() => receive({ data: { type: 'settings', productName: 'SnapZy', language: 'en', version: '1.0.0', delayMs: 0, openMode: 'window' } }));
+      await page.evaluate(() => receive({ data: { type: 'settings', productName: 'SnapZy', language: 'en', version: '1.0.1', delayMs: 0, openMode: 'window' } }));
       assert.equal(await page.locator('#shortcutDialog').isVisible(), true, 'Background settings must not dismiss the editor');
       await page.evaluate(() => receive({ data: { type: 'hotkeySaved', mode: 'launcher' } }));
       assert.equal(await page.locator('#shortcutDialog').isVisible(), false);
@@ -75,7 +75,7 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
     if (!mode || mode === 'help' || mode === 'icons') {
       const image = await page.evaluate(() => { const canvas = document.createElement('canvas'); canvas.width = 900; canvas.height = 500; const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 900, 500); return canvas.toDataURL(); });
       await page.setViewportSize({ width: 1200, height: 800 });
-      await page.goto(origin + '/editor.html?product=SnapZy&language=en&version=1.0.0&image=' + encodeURIComponent(image));
+      await page.goto(origin + '/editor.html?product=SnapZy&language=en&version=1.0.1&image=' + encodeURIComponent(image));
       await page.locator('#loading').waitFor({ state: 'hidden' });
       if (!mode || mode === 'help') {
         assert.equal(await page.locator('#editorHelpButton').count(), 1, 'Editor needs a Help button');

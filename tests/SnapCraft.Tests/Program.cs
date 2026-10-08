@@ -74,6 +74,8 @@ foreach (var audio in new[] { new VideoAudio(), new VideoAudio(true), new VideoA
     if (options.AudioSources.Count != (audio.System ? 1 : 0) + (audio.Microphone ? 1 : 0)) throw new Exception("Incorrect audio sources");
 }
 Console.WriteLine("video audio options: pass");
+RecordingPolicyTest.Run();
+await ProductivityTest.RunAsync(root);
 var recordingArgs = FfmpegVideoSession.RecordingArguments(new Rectangle(-1200, 20, 621, 401), "test.mp4");
 if (!recordingArgs.Contains("gdigrab") || !recordingArgs.Contains("-1200") || !recordingArgs.Contains("libx264") || !recordingArgs.Contains("pad=ceil(iw/2)*2:ceil(ih/2)*2"))
     throw new Exception("CPU capture arguments are incomplete");

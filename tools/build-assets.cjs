@@ -6,6 +6,7 @@ const roots = [path.resolve(__dirname, '../src/SnapCraft/Assets'), ...(process.a
 
 (async () => {
   const names = new Set();
+  for (const name of ['scan-text', 'copy', 'check']) names.add(name);
   for (const root of roots) {
     for (const file of fs.readdirSync(root).filter((file) => /\.(html|js)$/.test(file))) {
       for (const match of fs.readFileSync(path.join(root, file), 'utf8').matchAll(/data-lucide=["']([\w-]+)["']/g)) names.add(match[1]);
@@ -29,6 +30,13 @@ const roots = [path.resolve(__dirname, '../src/SnapCraft/Assets'), ...(process.a
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    for (const [name, glyph, size, color] of [['ocr-scan', 'scan-text', 28, '#155eef'], ['ocr-read', 'scan-text', 18, '#ffffff'], ['ocr-copy', 'copy', 18, '#17201d'], ['ocr-done', 'check', 18, '#ffffff']]) {
+      await page.setContent(`<style>body{margin:0}svg{width:${size}px;height:${size}px;color:${color}}</style><i data-lucide="${glyph}"></i>`);
+      await page.addScriptTag({ content: bundle.outputFiles[0].text });
+      await page.evaluate(() => lucide.createIcons());
+      fs.writeFileSync(path.join(roots[0], `icons/${name}.png`), await page.screenshot({ clip: { x: 0, y: 0, width: size, height: size }, omitBackground: true }));
+    }
+    if (process.argv.includes('--ocr-icons-only')) return;
     for (const [name, ico, targets] of [['icon', 'app', roots], ['snapzy', 'snapzy', [roots[0]]]]) {
       const svg = fs.readFileSync(path.join(roots[0], `icons/${name}.svg`));
       const pngs = [];
@@ -55,5 +63,11 @@ const roots = [path.resolve(__dirname, '../src/SnapCraft/Assets'), ...(process.a
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     await page.evaluate(() => lucide.createIcons());
     fs.writeFileSync(path.join(roots[0], 'icons/close.png'), await page.screenshot({ clip: { x: 0, y: 0, width: 20, height: 20 }, omitBackground: true }));
+    for (const [index, name] of ['scan', 'app-window', 'gallery-vertical-end', 'video'].entries()) {
+      await page.setContent(`<style>body{margin:0}svg{width:24px;height:24px;color:#155eef}</style><i data-lucide="${name}"></i>`);
+      await page.addScriptTag({ content: bundle.outputFiles[0].text });
+      await page.evaluate(() => lucide.createIcons());
+      fs.writeFileSync(path.join(roots[0], `icons/capture-${index}.png`), await page.screenshot({ clip: { x: 0, y: 0, width: 24, height: 24 }, omitBackground: true }));
+    }
   } finally { await browser.close(); }
 })().catch((error) => { console.error(error); process.exitCode = 1; });

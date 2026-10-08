@@ -66,8 +66,9 @@ internal static class ScrollSmokeTest
                         await windowVideo.StartAsync();
                         await Task.Delay(1400);
                         var videoPath = await windowVideo.StopAsync(true);
-                        if (videoPath is null || new FileInfo(videoPath).Length < 10_000)
+                        if (videoPath is null || !File.Exists(videoPath))
                             throw new Exception("Window MP4 was not written");
+                        VideoCpuSmokeTest.VerifyMp4(videoPath, audio: false);
                         Console.WriteLine("window video: pass");
                     }
                     var region = panel.RectangleToScreen(panel.ClientRectangle);
